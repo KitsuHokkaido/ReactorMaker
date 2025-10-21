@@ -1,19 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "reactor-maker"
 version = "0.1.0"
 description = "Create and mesh a reactor"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "ALLOUCHE", email = "david_allouche@outlook.com"}
+]
+dependencies = [ 
+]
 
 [project.optional-dependencies]
 dev = [
     "black>=22.0",
+    "pytest>=7.0",
 ]
 
+[project.scripts]
+reactor-maker = "reactor_maker.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
 [tool.setuptools.packages.find]
-where = ["dependencies", "src"]
-
-[tool.black]
-line-length = 88
-target-version = ['py310']
-skip-string-normalization = true
-
-
+where = ["src"]
