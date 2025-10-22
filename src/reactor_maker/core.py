@@ -105,6 +105,7 @@ class ReactorMaker:
         print(f"Number of faces : {len(faces)}")
 
         solid = self._geompy.MakePrismVecH(partition, direction, height)
+        solid = self._geompy.MakeGlueFaces(solid, 1e-6)
 
         return Result(
             value=ReactorGeometry(
