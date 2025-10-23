@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from .core import ReactorMaker
-from .vector.vector import vector3
+from .vector.vector import vector3, vector2
 
 def pars_arg():
     parser = argparse.ArgumentParser(
@@ -20,17 +20,21 @@ def pars_arg():
     )
 
     parser.add_argument(
-        "-r", "--radius",
+        "-rd", "--reactord",
+        nargs=2,
         type=float,
+        metavar=('R', 'H'),
         required=True,
-        help="Reactor radius"
+        help="Reactor dimensions : (R, H) : (radius, height)"
     )
 
     parser.add_argument(
-        "-s", "--height",
+        "-cd", "--chimneyd",
+        nargs=2,
         type=float,
+        metavar=('R', 'H'),
         required=True,
-        help="Reactor height"
+        help="Chimney/Smokestack dimensions : (R, H) : (radius, height)"
     )
 
     parser.add_argument(
@@ -42,18 +46,16 @@ def pars_arg():
 
     parser.add_argument(
         "-m", "--meshing",
-        nargs=3, 
+        required=True,
         type=float,
-        default=[0.4, 0.4, 0.4],
-        metavar=('S', 'C', 'H'),
-        help="Specify the fraction of the edge to mesh. S : square, C: circle, H: height. Default: 0.4 0.4 0.4"
+        help="Size characteristics of a reactor mesh"
     )
 
     parser.add_argument(
         "-o", "--output",
         type=str,
         default=".",
-        help="output directory. Default: current directory"
+        help="Output directory. Default: current directory"
     )
 
     parser.add_argument(
@@ -73,32 +75,33 @@ def main() -> None:
     print(f"Output directory: {output_dir}")
     print(f"Creating reactor with:")
     print(f"  Center: {args.center}")
-    print(f"  Radius: {args.radius}")
-    print(f"  Height: {args.height}")
+    print(f"  Radius: {args.reactord[0]}")
+    print(f"  Height: {args.reactord[1]}")
     print(f"  Per square: {args.per_square}")
+    print("Creating chimney with:")
+    print(f"  Radius: {args.chimneyd[0]}")
+    print(f"  Height: {args.chimneyd[1]}")
     print()
 
     maker = ReactorMaker() 
 
     geometry = maker.create_geometry(
         center=vector3(*args.center),
-        radius=args.radius, 
-        height=args.height, 
-        per_square=args.per_square
+        reactor_dim=vector2(*args.reactord), 
+        chimney_dim=vector2(*args.chimneyd), 
+        per_square=args.per_square, 
+        mesh_size=args.meshing
     ).unwrap()
 
-    if geometry.export_to(f"{args.output}/geometry.vtk"):
+    if geometry.export_to(f"{args.output}/geometry.stl"):
         print("File succesfully saved !")
 
-    mesh = maker.mesh(
-        geometry, 
-        square_divs=args.meshing[0], 
-        circle_divs=args.meshing[1], 
-        height_divs=args.meshing[2]
-    ).unwrap()
+    mesh = maker.mesh(geometry).unwrap()
 
-    if mesh.export_to(f"{args.output}/mesh.stl"):
+    if mesh.export_to(f"{args.output}/mesh.unv"):
         print("File succesfully saved !")
+
+    #mesh.save_as(f"{args.output}/mesh.hdf")
 
 
 if __name__ == "__main__":

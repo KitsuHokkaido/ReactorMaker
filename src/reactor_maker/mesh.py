@@ -1,9 +1,10 @@
 class ReactorMesh:
-    def __init__(self, mesh, radius, height, per_square):
+    def __init__(self, mesh, radius, height, per_square, geompy):
         self._mesh = mesh
         self._radius = radius
         self._height = height
         self._per_square = per_square
+        self._geompy = geompy
 
     @property
     def mesh(self):
@@ -25,6 +26,10 @@ class ReactorMesh:
         if self._mesh is None:
             raise ValueError("Mesh has not yet been created")
 
-        self._mesh.ExportSTL(filename)
+        self._mesh.ExportUNV(filename)
 
         return True
+
+    def save_as(self, filename:str):
+        self._geompy.myStudy.SaveAs(filename, self._geompy.myStudy._get_Name(), False)
+
