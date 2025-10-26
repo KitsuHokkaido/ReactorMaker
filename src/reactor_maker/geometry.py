@@ -7,7 +7,14 @@ from salome.geom import geomBuilder
 
 class ReactorGeometry:
     def __init__(
-        self, geometry, groups, reactor_dim, chimney_dim, per_square, mesh_size
+        self,
+        geometry,
+        groups,
+        reactor_dim,
+        chimney_dim,
+        per_square,
+        mesh_size,
+        square_width,
     ):
         self._geompy = geomBuilder.New()
 
@@ -17,6 +24,7 @@ class ReactorGeometry:
         self._per_square = per_square
         self._groups = groups
         self._mesh_size = mesh_size
+        self._square_width = square_width
 
     @property
     def geometry(self):
@@ -41,6 +49,10 @@ class ReactorGeometry:
     @property
     def mesh_size(self):
         return self._mesh_size
+
+    @property
+    def square_width(self):
+        return self._square_width
 
     def export_to(self, filename: str) -> bool:
         if self._geometry is None:

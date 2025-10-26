@@ -196,7 +196,10 @@ class Application:
         if self._mesh is None:
             return
 
-        filename = asksaveasfilename(title="Save As", defaultextension=".unv",)
+        filename = asksaveasfilename(
+            title="Save As",
+            defaultextension=".unv",
+        )
 
         if self._mesh.export_to(filename):
             self._outputs.insert(END, f"\nMesh succesfully saved !\n")

@@ -117,8 +117,12 @@ class ReactorMaker:
         ]
 
         meshing_square = self._geompy.MakePartition([rectangle], [*base_lines])
+        meshing_square = self._geompy.MakeGlueEdges(meshing_square, 1e-7)
 
-        return self._geompy.MakePartition([disk], [meshing_square, *lines])
+        partition = self._geompy.MakePartition([disk], [meshing_square, *lines])
+        partition = self._geompy.MakeGlueEdges(partition, 1e-7)
+
+        return partition
 
     def create_geometry(
         self,
@@ -141,7 +145,7 @@ class ReactorMaker:
             return Result(error="per_square must be between 0 and 1")
 
         square_width = reactor_dim.x * per_square
-        if square_width < chimney_dim.x * 2:
+        if square_width < 0.8 * chimney_dim.x:
             return Result(
                 error="The x-dimension of the chimney can't be greater than the center-square"
             )
@@ -152,7 +156,9 @@ class ReactorMaker:
             sketcher, center, reactor_dim, chimney_dim, square_width
         )
 
-        print(self._geompy.CheckShape(partition))
+        print(
+            f"Quality of the meshing : {"Ok" if self._geompy.CheckShape(partition) else "No"}"
+        )
 
         direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
         solid = self._geompy.MakePrismVecH(partition, direction, reactor_dim.y)
@@ -165,6 +171,7 @@ class ReactorMaker:
 
         reactor = self._geompy.MakePartition([solid, chimney])
         reactor = self._geompy.MakeGlueFaces(reactor, 1e-6)
+        # reactor = self._geompy.RemoveExtraEdges(reactor, True)
 
         faces = self._geompy.SubShapeAllSortedCentres(
             reactor, self._geompy.ShapeType["FACE"]
@@ -186,6 +193,7 @@ class ReactorMaker:
                 chimney_dim=chimney_dim,
                 per_square=per_square,
                 mesh_size=msh_sz,
+                square_width=square_width,
             )
         )
 
@@ -193,86 +201,66 @@ class ReactorMaker:
         if geometry.geometry is None:
             return Result(error="Geometry has not yet been created")
 
+        all_edges = self._geompy.SubShapeAllSortedCentres(
+            geometry.geometry, self._geompy.ShapeType["EDGE"]
+        )
+
         mesh = self._smesh.Mesh(geometry.geometry)
 
         mesh.Segment().NumberOfSegments(1)
 
-        square_width = geometry.reactor_dim.x * geometry.per_square
-        nb_seg = ceil(square_width / geometry.mesh_size)
-        #
-        #        vertex = self._geompy.MakeVertex(square_width/2, 0, 0)
-        #        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        #        algo = mesh.Segment(edge)
-        #        algo.NumberOfSegments(nb_seg)
-        #        algo.Propagation()
-        #
-        #        vertex = self._geompy.MakeVertex(0, square_width/2, 0)
-        #        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        #        algo = mesh.Segment(edge)
-        #        algo.NumberOfSegments(nb_seg)
-        #        algo.Propagation()
-        #
-        #        circle_size = geometry.reactor_dim.x - (geometry.reactor_dim.x * geometry.per_square) / 2
-        #        dr = (square_width / 2) * geometry.mesh_size
-        #        nb_seg = ceil(circle_size / dr)
-        #        on_line_pos = 1.1 * ((geometry.reactor_dim.x * geometry.per_square) / 2)
-        #        vertex = self._geompy.MakeVertex(on_line_pos, on_line_pos, 0)
-        #        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        #        algo = mesh.Segment(edge)
-        #        algo.NumberOfSegments(nb_seg)
-        #        algo.Propagation()
-        #
-        #        nb_seg = ceil(geometry.reactor_dim.y / dr)
-        #        vertex = self._geompy.MakeVertex(
-        #            geometry.reactor_dim.x, geometry.reactor_dim.x, geometry.reactor_dim.y / 2
-        #        )
-        #        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        #        algo = mesh.Segment(edge)
-        #        algo.NumberOfSegments(nb_seg)
-        #        algo.Propagation()
+        on_line_pos = (
+            geometry.square_width / 2 + (1 / 2 ** (1 / 2)) * geometry.reactor_dim.x
+        ) / 2
 
-        edges = self._geompy.SubShapeAllSortedCentres(
-            geometry.geometry, self._geompy.ShapeType["EDGE"]
-        )
+        points = [
+            vector3(geometry.chimney_dim.x / 2, 0, 0),
+            vector3(geometry.chimney_dim.x / 2, geometry.chimney_dim.x / 2 + 1, 0),
+            vector3(geometry.chimney_dim.x / 2, -geometry.chimney_dim.x / 2 - 1, 0),
+            vector3(0, geometry.chimney_dim.x / 2, 0),
+            vector3(geometry.chimney_dim.x / 2 + 1, geometry.chimney_dim.x / 2, 0),
+            vector3(-geometry.chimney_dim.x / 2 - 1, geometry.chimney_dim.x / 2, 0),
+            vector3(
+                geometry.reactor_dim.x,
+                geometry.reactor_dim.x,
+                geometry.reactor_dim.y / 2,
+            ),
+            vector3(on_line_pos, on_line_pos, 0),
+            vector3(
+                geometry.chimney_dim.x,
+                geometry.chimney_dim.x,
+                geometry.reactor_dim.y + geometry.chimney_dim.y / 2,
+            ),
+            vector3(geometry.reactor_dim.x, 0, 0),
+            vector3(0, geometry.reactor_dim.x, 0),
+            vector3(-geometry.reactor_dim.x, 0, 0),
+            vector3(0, -geometry.reactor_dim.x, 0),
+        ]
 
-        def is_vertical(edge):
-            [v1, v2] = self._geompy.SubShapeAllSortedCentres(
-                edge, self._geompy.ShapeType["VERTEX"]
-            )
-            p1 = self._geompy.PointCoordinates(v1)
-            p2 = self._geompy.PointCoordinates(v2)
-            return abs(p1[0] - p2[0]) < 1e-9
+        nb_seg_tot = 0
+        for i, point in enumerate(points):
+            vertice = self._geompy.MakeVertex(point.x, point.y, point.z)
 
-        def is_horizontal(edge):
-            [v1, v2] = self._geompy.SubShapeAllSortedCentres(
-                edge, self._geompy.ShapeType["VERTEX"]
-            )
-            p1 = self._geompy.PointCoordinates(v1)
-            p2 = self._geompy.PointCoordinates(v2)
-            return abs(p1[1] - p2[1]) < 1e-6
+            if i == 7:
+                edge = self._find_egde_by_geometry(all_edges, point).unwrap()
+            else:
+                edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertice)
 
-        vertical_edges = [e for e in edges if is_vertical(e)]
+            length = self._geompy.BasicProperties(edge)[0]
+            nb_seg = ceil(length / geometry.mesh_size)
 
-        if vertical_edges:
-            for edge in vertical_edges:
-                length = self._geompy.BasicProperties(edge)[0]
-                nb_seg = ceil(length / geometry.mesh_size)
-                algo = mesh.Segment(edge)
-                algo.NumberOfSegments(nb_seg)
-                algo.Propagation()
+            if i >= 0 and i <= 2:
+                nb_seg_tot += nb_seg
 
-        horizontal_edges = [e for e in edges if is_horizontal(e)]
+            if i >= 9:
+                nb_seg = nb_seg_tot
 
-        if horizontal_edges:
-            for edge in horizontal_edges:
-                length = self._geompy.BasicProperties(edge)[0]
-                nb_seg = ceil(length / geometry.mesh_size)
-                algo = mesh.Segment(edge)
-                algo.NumberOfSegments(nb_seg)
-                algo.Propagation()
+            algo = mesh.Segment(edge)
+            algo.NumberOfSegments(nb_seg)
+            algo.Propagation()
 
         mesh.Quadrangle()
-        # mesh.Hexahedron()
+        mesh.Hexahedron()
 
         mesh.GroupOnGeom(geometry.groups[0], "Inlet", SMESH.FACE)
         mesh.GroupOnGeom(geometry.groups[1], "Outlet", SMESH.FACE)
@@ -290,3 +278,23 @@ class ReactorMaker:
                 geompy=self._geompy,
             )
         )
+
+    def _find_egde_by_geometry(self, all_edges, center_pt: vector3, tol=1e-1) -> Result:
+        for edge in all_edges:
+            vertices = self._geompy.ExtractShapes(
+                edge, self._geompy.ShapeType["VERTEX"]
+            )
+
+            coords1 = self._geompy.PointCoordinates(vertices[0])
+            coords2 = self._geompy.PointCoordinates(vertices[1])
+            coords = [abs(coords1[i] + coords2[i]) / 2 for i in range(3)]
+
+            if (
+                abs(coords[0] - center_pt.x) < tol
+                and abs(coords[1] - center_pt.y) < tol
+                and abs(coords[2] - center_pt.z) < tol
+            ):
+
+                return Result(value=edge)
+
+        return Result(error="No edge find")
