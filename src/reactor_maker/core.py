@@ -40,7 +40,7 @@ class ReactorMaker:
         self._geompy.UnionIDs(inlet, items)
 
         outlet = self._geompy.CreateGroup(geometry, self._geompy.ShapeType["FACE"])
-        base = self._geompy.MakeVertex(center.x, center.y, center.z + height)
+        base = self._geompy.MakeVertex(center.x, center.y, center.z + reactor_dim.y + chimney_dim.y)
         direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
         items = self._geompy.GetShapesOnPlaneWithLocationIDs(
             geometry, self._geompy.ShapeType["FACE"], direction, base, GEOM.ST_ON
@@ -49,13 +49,32 @@ class ReactorMaker:
 
         wall = self._geompy.CreateGroup(geometry, self._geompy.ShapeType["FACE"])
         pts = [
-            self._geompy.MakeVertex(center.x + radius, center.y, center.z + height / 2),
-            self._geompy.MakeVertex(center.x - radius, center.y, center.z + height / 2),
-            self._geompy.MakeVertex(center.x, center.y + radius, center.z + height / 2),
-            self._geompy.MakeVertex(center.x, center.y - radius, center.z + height / 2),
+            vector3(center.x + radius, center.y, center.z + height / 2),
+            vector3(center.x - radius, center.y, center.z + height / 2),
+            vector3(center.x, center.y + radius, center.z + height / 2),
+            vector3(center.x, center.y - radius, center.z + height / 2),
+            vector3(center.x + chimney_dim.x / 2, center.y, center.z + height + chimney_dim.y/2),
+            vector3(center.x - chimney_dim.x / 2, center.y, center.z + height + chimney_dim.y/2),
+            vector3(center.x, center.y + chimney_dim.x / 2, center.z + height + chimney_dim.y/2),
+            vector3(center.x, center.y - chimney_dim.x / 2, center.z + height + chimney_dim.y/2)
         ]
-        faces = [self._geompy.GetFaceNearPoint(geometry, pt) for pt in pts]
+        
+        vertices = [self._geompy.MakeVertex(pt.x, pt.y, pt.z) for pt in pts]
+
+        faces = [self._geompy.GetFaceNearPoint(geometry, vertice) for vertice in vertices]
         self._geompy.UnionList(wall, faces)
+ 
+        base = self._geompy.MakeVertex(center.x, center.y, center.z + reactor_dim.y)
+        direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
+        items = self._geompy.GetShapesOnPlaneWithLocationIDs(
+            geometry, self._geompy.ShapeType["FACE"], direction, base, GEOM.ST_ON
+        )
+        top_center_face = self._geompy.GetFaceNearPoint(geometry, base)
+        top_face_id = self._geompy.GetSubShapeID(geometry, top_center_face)
+
+        items.remove(top_face_id)
+
+        self._geompy.UnionIDs(wall, items)
         return Result(value=(inlet, outlet, wall))
 
     def _create_base(self, sketcher, center, reactor_dim, chimney_dim, square_width):
