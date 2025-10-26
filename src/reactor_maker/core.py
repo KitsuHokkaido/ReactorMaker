@@ -1,6 +1,5 @@
 import salome
 
-from reactor_maker.vector import vector
 salome.salome_init_without_session()
 
 import GEOM, SMESH
@@ -67,9 +66,6 @@ class ReactorMaker:
             per_curvature=0.1
         ) 
         
-        #factor = chimney_dim.x / square_width
-        #base_chimney = self._geompy.MakeScaleTransform(rectangle, center_pt, factor)
-
         lines = [
             sketcher._create_line(
                 vector2(square_width / 2, square_width / 2), pi / 4, reactor_dim.x
@@ -82,27 +78,27 @@ class ReactorMaker:
             ),
             sketcher._create_line(
                 vector2(square_width / 2, -square_width / 2), (3 / 4) * pi, -reactor_dim.x
-            ),
+            )
         ]
 
-        return self._geompy.MakePartition([disk], [rectangle, *lines])
+        base_lines = [
+            sketcher._create_line(
+                vector2(chimney_dim.x / 2, 1.1*(square_width / 2)), pi / 2, -1.2*square_width
+            ),
+            sketcher._create_line(
+                vector2(-chimney_dim.x / 2, 1.1*(square_width / 2)), pi / 2 , -1.2*square_width
+            ),
+            sketcher._create_line(
+                vector2(-1.1*(square_width / 2), chimney_dim.x / 2), 0, 1.2*square_width
+            ),
+            sketcher._create_line(
+                vector2(-1.1*(square_width / 2), -chimney_dim.x / 2), 0, 1.2*square_width
+            )
+        ]
 
-    def _create_chimney(self, sketcher, center:vector3, chimney_dim:vector2, height:float, square_width:float):
-        pt_center_top_face = self._geompy.MakeVertex(center.x, center.y, center.z + 2 * height)
+        meshing_square = self._geompy.MakePartition([rectangle], [*base_lines])
 
-        base_chimney = sketcher._create_square_curvature(
-            center=vector2(center.x, center.y),
-            size=vector2(square_width, square_width), 
-            per_curvature=0.1
-        )
-        
-        factor = chimney_dim.x / square_width
-        base_chimney = self._geompy.MakeScaleTransform(base_chimney, pt_center_top_face, factor)
-       
-        direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
-        solid = self._geompy.MakePrismVecH(base_chimney, direction, chimney_dim.y)
-
-        return solid
+        return self._geompy.MakePartition([disk], [meshing_square, *lines])
 
     def create_geometry(
             self, center: vector3, reactor_dim: vector2, chimney_dim: vector2, per_square: float, 
@@ -126,33 +122,19 @@ class ReactorMaker:
         square_width = msh_sz * nb_seg
         partition = self._create_base(sketcher, center, reactor_dim, chimney_dim, square_width)
 
-        base_faces = self._geompy.SubShapeAllSortedCentres(partition, self._geompy.ShapeType["FACE"])
-        for f in base_faces:
-            wires = self._geompy.ExtractShapes(f, GEOM.WIRE)
-            print("Face has", len(wires), "wires")
+        print(self._geompy.CheckShape(partition))
         
         direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
         solid = self._geompy.MakePrismVecH(partition, direction, reactor_dim.y)
         solid = self._geompy.MakeGlueFaces(solid, 1e-6)
 
-        #face_chimney = self._geompy.GetFaceNearPoint(solid, self._geompy.MakeVertex(center.x, center.y, center.z + reactor_dim.y))
-        #chimney = self._geompy.MakePrismVecH(face_chimney, direction, chimney_dim.y)
-
-        chimney = self._create_chimney(sketcher, center, chimney_dim, reactor_dim.y, square_width)
-
-        reactor = self._geompy.MakeFuse(solid, chimney)
+        face_chimney = self._geompy.GetFaceNearPoint(solid, self._geompy.MakeVertex(center.x, center.y, center.z + reactor_dim.y))
+        chimney = self._geompy.MakePrismVecH(face_chimney, direction, chimney_dim.y)
+ 
+        reactor = self._geompy.MakePartition([solid, chimney]) 
         reactor = self._geompy.MakeGlueFaces(reactor, 1e-6)
-
-        faces = self._geompy.SubShapeAllSortedCentres(
-            solid, self._geompy.ShapeType["FACE"]
-        )
-
-
-        faces = self._geompy.SubShapeAllSortedCentres(reactor, self._geompy.ShapeType["FACE"])
-        for i, f in enumerate(faces):
-            wires = self._geompy.ExtractShapes(f, GEOM.WIRE)
-            print(f"FACE #{i} → {len(wires)} wires")
         
+        faces = self._geompy.SubShapeAllSortedCentres(reactor, self._geompy.ShapeType["FACE"]) 
         print("Solid created !")
         print(f"Number of faces : {len(faces)}")
         print()
@@ -180,43 +162,79 @@ class ReactorMaker:
         mesh = self._smesh.Mesh(geometry.geometry)
 
         mesh.Segment().NumberOfSegments(1)
-        
+    
         square_width = geometry.reactor_dim.x * geometry.per_square
         nb_seg = ceil(square_width / geometry.mesh_size)
+#
+#        vertex = self._geompy.MakeVertex(square_width/2, 0, 0)
+#        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
+#        algo = mesh.Segment(edge)
+#        algo.NumberOfSegments(nb_seg)
+#        algo.Propagation()
+#
+#        vertex = self._geompy.MakeVertex(0, square_width/2, 0)
+#        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
+#        algo = mesh.Segment(edge)
+#        algo.NumberOfSegments(nb_seg)
+#        algo.Propagation()
+#
+#        circle_size = geometry.reactor_dim.x - (geometry.reactor_dim.x * geometry.per_square) / 2
+#        dr = (square_width / 2) * geometry.mesh_size
+#        nb_seg = ceil(circle_size / dr)
+#        on_line_pos = 1.1 * ((geometry.reactor_dim.x * geometry.per_square) / 2)
+#        vertex = self._geompy.MakeVertex(on_line_pos, on_line_pos, 0)
+#        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
+#        algo = mesh.Segment(edge)
+#        algo.NumberOfSegments(nb_seg)
+#        algo.Propagation()
+#        
+#        nb_seg = ceil(geometry.reactor_dim.y / dr)
+#        vertex = self._geompy.MakeVertex(
+#            geometry.reactor_dim.x, geometry.reactor_dim.x, geometry.reactor_dim.y / 2
+#        )
+#        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
+#        algo = mesh.Segment(edge)
+#        algo.NumberOfSegments(nb_seg)
+#        algo.Propagation()
 
-        vertex = self._geompy.MakeVertex(geometry.reactor_dim.x, 0, 0)
-        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        algo = mesh.Segment(edge)
-        algo.NumberOfSegments(nb_seg)
-        algo.Propagation()
 
-        vertex = self._geompy.MakeVertex(0, geometry.reactor_dim.x, 0)
-        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        algo = mesh.Segment(edge)
-        algo.NumberOfSegments(nb_seg)
-        algo.Propagation()
 
-        circle_size = geometry.reactor_dim.x - (geometry.reactor_dim.x * geometry.per_square) / 2
-        dr = (square_width / 2) * geometry.mesh_size
-        nb_seg = ceil(circle_size / dr)
-        on_line_pos = 1.1 * ((geometry.reactor_dim.x * geometry.per_square) / 2)
-        vertex = self._geompy.MakeVertex(on_line_pos, on_line_pos, 0)
-        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        algo = mesh.Segment(edge)
-        algo.NumberOfSegments(nb_seg)
-        algo.Propagation()
-        
-        nb_seg = ceil(geometry.reactor_dim.y / dr)
-        vertex = self._geompy.MakeVertex(
-            geometry.reactor_dim.x, geometry.reactor_dim.x, geometry.reactor_dim.y / 2
-        )
-        edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertex)
-        algo = mesh.Segment(edge)
-        algo.NumberOfSegments(nb_seg)
-        algo.Propagation()
+        edges = self._geompy.SubShapeAllSortedCentres(geometry.geometry, self._geompy.ShapeType["EDGE"])
+
+        def is_vertical(edge):
+            [v1, v2] = self._geompy.SubShapeAllSortedCentres(edge, self._geompy.ShapeType["VERTEX"])
+            p1 = self._geompy.PointCoordinates(v1)
+            p2 = self._geompy.PointCoordinates(v2)
+            return abs(p1[0] - p2[0]) < 1e-9
+
+        def is_horizontal(edge):
+            [v1, v2] = self._geompy.SubShapeAllSortedCentres(edge, self._geompy.ShapeType["VERTEX"])
+            p1 = self._geompy.PointCoordinates(v1)
+            p2 = self._geompy.PointCoordinates(v2)
+            return abs(p1[1] - p2[1]) < 1e-6
+
+        vertical_edges = [e for e in edges if is_vertical(e)]
+
+        if vertical_edges:
+            for edge in vertical_edges:
+                length = self._geompy.BasicProperties(edge)[0]
+                nb_seg = ceil(length / geometry.mesh_size)
+                algo = mesh.Segment(edge)
+                algo.NumberOfSegments(nb_seg)
+                algo.Propagation()
+
+        horizontal_edges = [e for e in edges if is_horizontal(e)]
+
+        if horizontal_edges:
+           for edge in horizontal_edges:
+                length = self._geompy.BasicProperties(edge)[0]
+                nb_seg = ceil(length / geometry.mesh_size)
+                algo = mesh.Segment(edge)
+                algo.NumberOfSegments(nb_seg)
+                algo.Propagation()
 
         mesh.Quadrangle()
-        mesh.Hexahedron()
+        #mesh.Hexahedron()
 
         mesh.GroupOnGeom(geometry.groups[0], "Inlet", SMESH.FACE)
         mesh.GroupOnGeom(geometry.groups[1], "Outlet", SMESH.FACE)

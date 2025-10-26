@@ -11,7 +11,8 @@ requires-python = ">=3.10"
 authors = [
     {name = "ALLOUCHE", email = "david_allouche@outlook.com"}
 ]
-dependencies = [ 
+dependencies = [
+    "ttkbootstrap>=1.1"
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,7 @@ dev = [
 
 [project.scripts]
 reactor-maker = "reactor_maker.cli:main"
+reactor-maker-gui = "reactor_maker.gui:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
