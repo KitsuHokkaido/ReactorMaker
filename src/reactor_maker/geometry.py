@@ -6,7 +6,9 @@ from salome.geom import geomBuilder
 
 
 class ReactorGeometry:
-    def __init__(self, geometry, groups, reactor_dim, chimney_dim, per_square, mesh_size):
+    def __init__(
+        self, geometry, groups, reactor_dim, chimney_dim, per_square, mesh_size
+    ):
         self._geompy = geomBuilder.New()
 
         self._geometry = geometry
@@ -32,7 +34,7 @@ class ReactorGeometry:
     def per_square(self):
         return self._per_square
 
-    @property 
+    @property
     def groups(self):
         return self._groups
 

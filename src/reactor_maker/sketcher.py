@@ -2,6 +2,7 @@ from math import pi, cos, sin
 
 from .vector.vector import vector2, vector3
 
+
 class Sketcher:
     def __init__(self, builder):
         self._geompy = builder
@@ -45,14 +46,16 @@ class Sketcher:
 
         return plane
 
-    def _create_square_curvature(self, center: vector2, size:vector2, per_curvature:float):
+    def _create_square_curvature(
+        self, center: vector2, size: vector2, per_curvature: float
+    ):
         """
-        Create a square with its edges curved 
+        Create a square with its edges curved
 
         Args:
             center          (vector2):  Position of the object, origin is the center
             size            (vector2):  Size of the figure
-            per_curvature   (float):    distance between the farthest point of the edge and its projection of it with curvature 
+            per_curvature   (float):    distance between the farthest point of the edge and its projection of it with curvature
 
         Returns:
             SalomeObject: The figure
@@ -66,28 +69,27 @@ class Sketcher:
         adding_y = per_curvature * (size.y / 2)
 
         pts_boundary = [
-            self._geompy.MakeVertex(center.x - size.x/2, center.y + size.y/2, 0),
-            self._geompy.MakeVertex(center.x + size.x/2, center.y + size.y/2, 0),
-            self._geompy.MakeVertex(center.x - size.x/2, center.y - size.y/2, 0),
-            self._geompy.MakeVertex(center.x + size.x/2, center.y - size.y/2, 0)
+            self._geompy.MakeVertex(center.x - size.x / 2, center.y + size.y / 2, 0),
+            self._geompy.MakeVertex(center.x + size.x / 2, center.y + size.y / 2, 0),
+            self._geompy.MakeVertex(center.x - size.x / 2, center.y - size.y / 2, 0),
+            self._geompy.MakeVertex(center.x + size.x / 2, center.y - size.y / 2, 0),
         ]
-        
+
         pts_farthest = [
-            self._geompy.MakeVertex(center.x + size.x/2 + adding_x, 0, 0),
-            self._geompy.MakeVertex(center.x - size.x/2 - adding_x, 0, 0),
-            self._geompy.MakeVertex(0, center.y + size.y/2 + adding_y, 0),
-            self._geompy.MakeVertex(0, center.y - size.y/2 - adding_y, 0),
+            self._geompy.MakeVertex(center.x + size.x / 2 + adding_x, 0, 0),
+            self._geompy.MakeVertex(center.x - size.x / 2 - adding_x, 0, 0),
+            self._geompy.MakeVertex(0, center.y + size.y / 2 + adding_y, 0),
+            self._geompy.MakeVertex(0, center.y - size.y / 2 - adding_y, 0),
         ]
 
         lines = [
-            self._geompy.MakeArc(pts_boundary[1], pts_farthest[0], pts_boundary[3]), 
-            self._geompy.MakeArc(pts_boundary[0], pts_farthest[1], pts_boundary[2]), 
-            self._geompy.MakeArc(pts_boundary[0], pts_farthest[2], pts_boundary[1]), 
-            self._geompy.MakeArc(pts_boundary[2], pts_farthest[3], pts_boundary[3]), 
+            self._geompy.MakeArc(pts_boundary[1], pts_farthest[0], pts_boundary[3]),
+            self._geompy.MakeArc(pts_boundary[0], pts_farthest[1], pts_boundary[2]),
+            self._geompy.MakeArc(pts_boundary[0], pts_farthest[2], pts_boundary[1]),
+            self._geompy.MakeArc(pts_boundary[2], pts_farthest[3], pts_boundary[3]),
         ]
 
         wire = self._geompy.MakeWire(lines)
         plane = self._geompy.MakeFace(wire, True)
 
         return plane
-

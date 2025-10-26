@@ -30,6 +30,5 @@ class ReactorMesh:
 
         return True
 
-    def save_as(self, filename:str):
+    def save_as(self, filename: str):
         self._geompy.myStudy.SaveAs(filename, self._geompy.myStudy._get_Name(), False)
-

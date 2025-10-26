@@ -12,11 +12,14 @@ Basic usage:
 
 from .core import ReactorMaker
 from .vector.vector import vector3, vector2
-from .mesh import ReactorMesh 
+from .mesh import ReactorMesh
 from .geometry import ReactorGeometry
 
 __version__ = "0.1.0"
 __all__ = [
-    "ReactorMaker", "ReactorGeometry", "ReactorMesh",
-    "vector3", "vector2", 
+    "ReactorMaker",
+    "ReactorGeometry",
+    "ReactorMesh",
+    "vector3",
+    "vector2",
 ]

@@ -12,7 +12,7 @@ authors = [
     {name = "ALLOUCHE", email = "david_allouche@outlook.com"}
 ]
 dependencies = [
-    "ttkbootstrap>=1.1"
+    "ttkbootstrap>=1.1", 
 ]
 
 [project.optional-dependencies]
@@ -24,6 +24,11 @@ dev = [
 [project.scripts]
 reactor-maker = "reactor_maker.cli:main"
 reactor-maker-gui = "reactor_maker.gui:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+skip-string-normalization = true
 
 [tool.setuptools]
 package-dir = {"" = "src"}
