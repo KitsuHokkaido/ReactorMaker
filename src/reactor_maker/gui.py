@@ -1,9 +1,11 @@
 import tkinter as tk
 from tkinter.filedialog import asksaveasfilename
-from tkinter.messagebox import showinfo
+from tkinter.messagebox import showinfo, showwarning
 
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+
+from typing import List
 
 from .core import ReactorMaker
 from .vector.vector import vector2, vector3
@@ -24,10 +26,19 @@ class Application:
         self._rframe = ttk.Frame(self._window, padding=10)
         self._rframe.pack(side=RIGHT, fill=BOTH, expand=True, padx=10, pady=10)
 
+        self._per_square_var = tk.StringVar(value="0.50")
+
         self._generate_parameters_widget()
 
         button_frame = ttk.Frame(self._lframe)
         button_frame.pack(side=BOTTOM, fill=X, pady=5)
+
+        self._optimize_button = ttk.Checkbutton(
+            self._lframe, text="Optimize mesh (beta)"
+        )
+        self._optimize_button.pack(side=LEFT, padx=5)
+        self._optimize_button.invoke()
+        self._optimize_button.invoke()
 
         self._reset_button = ttk.Button(
             button_frame, text="Reset", bootstyle="secondary", command=self._on_reset
@@ -73,11 +84,24 @@ class Application:
         ttk.Label(
             geometry_frame, text="Reactor dimensions", font=("Helvetica", 10, "bold")
         ).grid(row=0, column=0, columnspan=2, sticky=W, padx=5, pady=5)
+
         ttk.Label(geometry_frame, text="Center position").grid(
             row=1, column=0, padx=5, pady=5, sticky=W
         )
-        self._center_entry = ttk.Entry(geometry_frame)
-        self._center_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        frame_center = ttk.Frame(geometry_frame)
+        frame_center.grid(row=1, column=1, padx=5, pady=5, sticky=EW)
+
+        self._center_entry = []
+        labels = ["X:", "Y:", "Z:"]
+
+        for label_text in labels:
+            ttk.Label(frame_center, text=label_text, font=("Helvetica", 10)).pack(
+                side=LEFT, padx=(5, 2)
+            )
+            entry = ttk.Entry(frame_center, width=3)
+            entry.pack(side=LEFT, padx=(0, 5))
+            self._center_entry.append(entry)
 
         ttk.Label(geometry_frame, text="Radius").grid(
             row=2, column=0, padx=5, pady=5, sticky=W
@@ -94,8 +118,24 @@ class Application:
         ttk.Label(geometry_frame, text="Square mesh size").grid(
             row=4, column=0, padx=5, pady=5, sticky=W
         )
-        self._per_squarre_entry = ttk.Entry(geometry_frame)
-        self._per_squarre_entry.grid(row=4, column=1, padx=5, pady=5)
+
+        frame_scale = ttk.Frame(geometry_frame)
+        frame_scale.grid(row=4, column=1, pady=5, sticky=EW)
+
+        self._per_squarre_entry = ttk.Scale(
+            frame_scale,
+            orient=HORIZONTAL,
+            value=50,
+            from_=0,
+            to=99,
+            length=80,
+            command=self._update_per_square,
+        )
+        self._per_squarre_entry.pack(side=LEFT, fill=X, expand=True, padx=(28, 10))
+
+        ttk.Label(frame_scale, textvariable=self._per_square_var, width=6).pack(
+            side=RIGHT
+        )
 
         ttk.Separator(geometry_frame, orient=HORIZONTAL).grid(
             row=5, column=0, columnspan=2, sticky=EW, pady=15, padx=10
@@ -132,6 +172,9 @@ class Application:
 
         meshing_frame.columnconfigure(1, weight=1)
 
+    def _update_per_square(self, value):
+        self._per_square_var.set(f"{float(value)/100:.2f}")
+
     def _generate_output_widget(self):
         self._tabs = ttk.Notebook(self._rframe)
         self._tabs.pack(fill=BOTH, expand=YES)
@@ -146,22 +189,50 @@ class Application:
         self._outputs.pack(fill=BOTH, expand=YES)
 
     def _on_reset(self):
-        self._center_entry.delete(0, END)
+        for entry in self._center_entry:
+            entry.delete(0, END)
         self._reactor_radius_entry.delete(0, END)
         self._reactor_height_entry.delete(0, END)
-        self._per_squarre_entry.delete(0, END)
+        self._per_squarre_entry.set(50)
         self._chimney_width_entry.delete(0, END)
         self._chimney_height_entry.delete(0, END)
         self._mesh_size_entry.delete(0, END)
 
+    def _check_entry(self, datas: List) -> bool:
+        for data in datas:
+            print(type(data))
+            if not data:
+                showwarning(title="Warning", message="Some values aren't filled !")
+                return False
+            if not isinstance(data, float):
+                if not data.isdigit():
+                    showwarning(title="Warning", message="Numbers are expected !")
+                    return False
+
+        if float(datas[2]) * float(datas[0]) < float(datas[3]):
+            showwarning(
+                title="Warning",
+                message="Squarre meshing size must be greater than the width of the chimney !",
+            )
+            return False
+
+        return True
+
     def _on_generate(self):
-        center = self._center_entry.get()
+        center = [entry.get() for entry in self._center_entry]
         radius = self._reactor_radius_entry.get()
         height = self._reactor_height_entry.get()
-        per_squarre = self._per_squarre_entry.get()
+        per_squarre = self._per_squarre_entry.get() / 100
         chimney_w = self._chimney_width_entry.get()
         chimney_h = self._chimney_height_entry.get()
         mesh_size = self._mesh_size_entry.get()
+
+        print(center)
+
+        if not self._check_entry(
+            [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center]
+        ):
+            return
 
         self._outputs.insert(END, f"\n--- Generation started ---\n\n")
         self._outputs.insert(END, f"Center: {center}\n")
@@ -175,8 +246,6 @@ class Application:
         self._outputs.see(END)
 
         maker = ReactorMaker()
-
-        center = center.split(";")
 
         geometry = maker.create_geometry(
             center=vector3(float(center[0]), float(center[1]), float(center[2])),
