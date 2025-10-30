@@ -1,5 +1,9 @@
 # Reactor Maker
 
+Reactor meshed | GUI
+--------|------
+![](docs/reactor.png) | ![](docs/gui.png)
+
 Create and mesh reactor geometries.
 
 ## Features 
@@ -47,12 +51,12 @@ reactor-maker-gui
 
 ## Documentation
 
-For detailed documentation, see : 
+For detailed documentation, see :
 
-- [Installation Guide](docs/installation.md)
-- [User Guide](docs/user-guide/README.md)
-- [API Reference](docs/api-reference/README.md)
-- [Examples](docs/user-guide/examples.md)
+- [Documentation](docs/index.md)
+- [Installation Guide](docs/getting-started/installation.md)
+- [User Guide](docs/user-guide/index.md)
+- [API Reference](docs/api-reference/index.md)
 
 ## Example 
 
