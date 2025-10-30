@@ -1,2 +1,3 @@
 outputs/
-reactor_maker.egg-info/
+*.egg-info/
+__pycache__/
