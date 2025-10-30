@@ -2,7 +2,7 @@
 
 Reactor meshed | GUI
 --------|------
-![](docs/reactor.png) | ![](docs/gui.png)
+![](docs/img/reactor.png) | ![](docs/img/gui.png)
 
 Create and mesh reactor geometries.
 

@@ -65,8 +65,10 @@ class Sketcher:
         if per_curvature == 0:
             raise ValueError("per_curvature must be different from zero")
 
-        adding_x = per_curvature * (size.x / 2)
-        adding_y = per_curvature * (size.y / 2)
+        radius = (2) ** (1 / 2) * (max(size.x, size.y) / 2)
+
+        adding_x = per_curvature * (radius - (size.x / 2))
+        adding_y = per_curvature * (radius - (size.y / 2))
 
         pts_boundary = [
             self._geompy.MakeVertex(center.x - size.x / 2, center.y + size.y / 2, 0),

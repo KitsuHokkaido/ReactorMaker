@@ -1,4 +1,4 @@
-import salome
+import salome, sys
 
 salome.salome_init_without_session()
 
@@ -8,6 +8,8 @@ from salome.smesh import smeshBuilder
 
 from pathlib import Path
 from math import pi, ceil, log, sqrt
+from typing import Optional, Tuple, List
+from scipy.optimize import minimize
 
 from ..error import Result
 from ..vector import vector3, vector2
@@ -16,6 +18,7 @@ from .geometry import ReactorGeometry
 from .mesh import ReactorMesh
 from .sketcher import Sketcher
 
+from ..text_redirector import TextRedirector
 
 class ReactorMaker:
     def __init__(self):
@@ -25,6 +28,13 @@ class ReactorMaker:
 
         self._geompy = geomBuilder.New()
         self._smesh = smeshBuilder.New()
+
+    def set_output_widget(self, widget):
+        self._old_output = sys.stdout 
+        sys.stdout = TextRedirector(widget)
+
+    def reset_output(self):
+        sys.stdout = self._old_output
 
     def _create_group(
         self, geometry, center: vector3, reactor_dim: vector2, chimney_dim: vector2
@@ -98,7 +108,9 @@ class ReactorMaker:
         self._geompy.UnionIDs(wall, items)
         return Result(value=(inlet, outlet, wall))
 
-    def _create_base(self, sketcher, center, reactor_dim, chimney_dim, square_width):
+    def _create_base(
+        self, sketcher, center, reactor_dim, chimney_dim, square_width, per_curvature
+    ):
         center_pt = self._geompy.MakeVertex(center.x, center.y, center.z)
         direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
         rotation_axis = self._geompy.MakeLine(center_pt, direction)
@@ -111,7 +123,7 @@ class ReactorMaker:
         rectangle = sketcher._create_square_curvature(
             center=vector2(center.x, center.y),
             size=vector2(square_width, square_width),
-            per_curvature=0.1,
+            per_curvature=per_curvature,
         )
 
         lines = [
@@ -135,24 +147,24 @@ class ReactorMaker:
 
         base_lines = [
             sketcher._create_line(
-                vector2(chimney_dim.x / 2, 1.1 * (square_width / 2)),
+                vector2(chimney_dim.x / 2, square_width),
                 pi / 2,
-                -1.2 * square_width,
+                -2 * square_width,
             ),
             sketcher._create_line(
-                vector2(-chimney_dim.x / 2, 1.1 * (square_width / 2)),
+                vector2(-chimney_dim.x / 2, square_width),
                 pi / 2,
-                -1.2 * square_width,
+                -2 * square_width,
             ),
             sketcher._create_line(
-                vector2(-1.1 * (square_width / 2), chimney_dim.x / 2),
+                vector2(-square_width, chimney_dim.x / 2),
                 0,
-                1.2 * square_width,
+                2 * square_width,
             ),
             sketcher._create_line(
-                vector2(-1.1 * (square_width / 2), -chimney_dim.x / 2),
+                vector2(-square_width, -chimney_dim.x / 2),
                 0,
-                1.2 * square_width,
+                2 * square_width,
             ),
         ]
 
@@ -164,6 +176,134 @@ class ReactorMaker:
 
         return partition
 
+    def _optimize_geom_mesh(
+        self, center, reactor_dim, chimney_dim, mesh_size
+    ) -> Optional[Tuple]:
+        sketcher = Sketcher(self._geompy)
+
+        def residus(x):
+            per_square, per_curvature = x
+
+            square_width = per_square * reactor_dim.x
+            
+            base = self._create_base(
+                sketcher, center, reactor_dim, chimney_dim, square_width, per_curvature
+            )
+            
+            geometry = ReactorGeometry(
+                base,
+                None,
+                reactor_dim,
+                chimney_dim,
+                per_square,
+                mesh_size,
+                square_width,
+            )
+
+            mesh = self._smesh.Mesh(base)
+
+            mesh.Segment().NumberOfSegments(1)
+
+            all_edges = self._geompy.SubShapeAllSortedCentres(
+                geometry.geometry, self._geompy.ShapeType["EDGE"]
+            )
+
+            self._create_base_mesh(geometry, mesh, True, all_edges)
+
+            mesh.Quadrangle()
+
+            try:
+                mesh.Compute()
+
+                aspect_ratios = self._get_aspect_ratio(mesh)
+
+                print(max(aspect_ratios))
+
+                return max(aspect_ratios) - 1
+
+            except Exception as e:
+                print(e)
+                return 1e6
+
+        bounds = [(0.05, 0.99), (0.05, 0.8)]
+
+        result = minimize(
+            fun=residus, 
+            x0=[0.8, 0.2], 
+            bounds=bounds, 
+            method="L-BFGS-B",
+            options={'disp':True}
+        )
+        
+        if not result.success:
+            print("")
+            print("Error : ", result.message)
+            print("")
+            print("==================================")
+            print("Failed to optimize the geometry...")
+            print("==================================")
+            print("")
+            print("Trying to compute without optimization...")
+            print("")
+
+            return None
+
+        return result.x
+
+    def _handling_optimization(
+        self,
+        optimize,
+        center,
+        reactor_dim,
+        chimney_dim,
+        msh_sz,
+        per_square,
+        per_curvature,
+    ) -> Result:
+        square_width = 0
+        per_curve = 0
+
+        if optimize:
+            print()
+            print("Optimize option selected...")
+            print("Optimizing...")
+            if reactor_dim.x <= 0.8 * chimney_dim.x:
+                return Result(
+                    error="Chimney width can't be greater than the max size of the meshing square"
+                )
+
+            result = self._optimize_geom_mesh(center, reactor_dim, chimney_dim, msh_sz)
+            if result is None:
+                print("Computing the reactor with the default value...")
+                print("Default value : (per_square, per_curvature) = (0.99, 0.1)")
+                print("")
+                per_curve = 0.1
+                square_width = 0.99 * reactor_dim.x
+            else:
+                print("Best parameters : ", result)
+                square_width = result[0] * reactor_dim.x
+                per_curve = result[1]
+
+        else:
+            if per_square <= 0 or per_square >= 1:
+                return Result(error="per_square must be between 0 and 1")
+
+            if per_curvature <= 0 or per_curvature >= 1:
+                return Result(error="per_curvature must be between 0 and 1")
+
+            square_width = reactor_dim.x * per_square
+            if square_width < 0.8 * chimney_dim.x:
+                return Result(
+                    error="The x-dimension of the chimney can't be greater than the center-square"
+                )
+
+            nb_seg = ceil(square_width / msh_sz)
+
+            square_width = msh_sz * nb_seg
+            per_curve = per_curvature
+
+        return Result(value=(square_width, per_curve))
+
     def create_geometry(
         self,
         center: vector3,
@@ -171,6 +311,8 @@ class ReactorMaker:
         chimney_dim: vector2,
         per_square: float,
         mesh_size: float,
+        per_curvature: float = 0.1,
+        optimize: bool = False,
     ) -> Result:
         nb_seg = ceil(chimney_dim.x / mesh_size)
         msh_sz = chimney_dim.x / nb_seg
@@ -178,30 +320,31 @@ class ReactorMaker:
         print(
             f"New characteristics mesh size to maximize the aspect ratio : {mesh_size:0.2f} ⭢ {msh_sz:0.2f}"
         )
+        print()
 
         sketcher = Sketcher(self._geompy)
 
-        if per_square <= 0 or per_square >= 1:
-            return Result(error="per_square must be between 0 and 1")
+        square_width, per_curve = self._handling_optimization(
+            optimize,
+            center,
+            reactor_dim,
+            chimney_dim,
+            msh_sz,
+            per_square,
+            per_curvature,
+        ).unwrap()
 
-        square_width = reactor_dim.x * per_square
-        if square_width < 0.8 * chimney_dim.x:
-            return Result(
-                error="The x-dimension of the chimney can't be greater than the center-square"
-            )
-
-        nb_seg = ceil(square_width / msh_sz)
-        square_width = msh_sz * nb_seg
-        partition = self._create_base(
-            sketcher, center, reactor_dim, chimney_dim, square_width
+        base = self._create_base(
+            sketcher, center, reactor_dim, chimney_dim, square_width, per_curve
         )
 
         print(
-            f"Quality of the meshing : {"Ok" if self._geompy.CheckShape(partition) else "No"}"
+            f"Quality of the meshing : {"Ok" if self._geompy.CheckShape(base) else "No"}"
         )
+        print()
 
         direction = self._geompy.MakeVectorDXDYDZ(0, 0, 1)
-        solid = self._geompy.MakePrismVecH(partition, direction, reactor_dim.y)
+        solid = self._geompy.MakePrismVecH(base, direction, reactor_dim.y)
         solid = self._geompy.MakeGlueFaces(solid, 1e-6)
 
         face_chimney = self._geompy.GetFaceNearPoint(
@@ -211,14 +354,7 @@ class ReactorMaker:
 
         reactor = self._geompy.MakePartition([solid, chimney])
         reactor = self._geompy.MakeGlueFaces(reactor, 1e-6)
-
-        faces = self._geompy.SubShapeAllSortedCentres(
-            reactor, self._geompy.ShapeType["FACE"]
-        )
-        print("Solid created !")
-        print(f"Number of faces : {len(faces)}")
-        print()
-
+        
         print("Creation of the groups...")
         groups = self._create_group(reactor, center, reactor_dim, chimney_dim).unwrap()
         print("Done !")
@@ -236,41 +372,7 @@ class ReactorMaker:
             )
         )
 
-    def mesh(self, geometry: ReactorGeometry, optimize:bool) -> Result:
-        if geometry.geometry is None:
-            return Result(error="Geometry has not yet been created")
-
-        all_edges = self._geompy.SubShapeAllSortedCentres(
-            geometry.geometry, self._geompy.ShapeType["EDGE"]
-        )
-
-        mesh = self._smesh.Mesh(geometry.geometry)
-
-        mesh.Segment().NumberOfSegments(1)
-
-        points = [
-            vector3(geometry.chimney_dim.x / 2, 0, 0),
-            vector3(geometry.chimney_dim.x / 2, geometry.chimney_dim.x / 2 + 1, 0),
-            vector3(geometry.chimney_dim.x / 2, -geometry.chimney_dim.x / 2 - 1, 0),
-            vector3(0, geometry.chimney_dim.x / 2, 0),
-            vector3(geometry.chimney_dim.x / 2 + 1, geometry.chimney_dim.x / 2, 0),
-            vector3(-geometry.chimney_dim.x / 2 - 1, geometry.chimney_dim.x / 2, 0),
-            vector3(
-                geometry.reactor_dim.x,
-                geometry.reactor_dim.x,
-                geometry.reactor_dim.y / 2,
-            ),
-            vector3(
-                geometry.chimney_dim.x,
-                geometry.chimney_dim.x,
-                geometry.reactor_dim.y + geometry.chimney_dim.y / 2,
-            ),
-            vector3(geometry.reactor_dim.x, 0, 0),
-            vector3(0, geometry.reactor_dim.x, 0),
-            vector3(-geometry.reactor_dim.x, 0, 0),
-            vector3(0, -geometry.reactor_dim.x, 0),
-        ]
-
+    def _mesh_near_points(self, points, geometry, mesh, base: bool) -> None:
         nb_seg_tot = 0
         for i, point in enumerate(points):
             vertice = self._geompy.MakeVertex(point.x, point.y, point.z)
@@ -279,16 +381,34 @@ class ReactorMaker:
             length = self._geompy.BasicProperties(edge)[0]
             nb_seg = ceil(length / geometry.mesh_size)
 
-            if i >= 0 and i <= 2:
-                nb_seg_tot += nb_seg
+            if base:
+                if i >= 0 and i <= 2:
+                    nb_seg_tot += nb_seg
 
-            if i >= 8:
-                nb_seg = nb_seg_tot
+                if i >= 6:
+                    nb_seg = nb_seg_tot
 
             algo = mesh.Segment(edge)
             algo.NumberOfSegments(nb_seg)
             algo.Propagation()
 
+    def _create_base_mesh(self, geometry, mesh, optimize: bool, all_edges) -> None:
+        points = [
+            vector3(geometry.chimney_dim.x / 2, 0, 0),
+            vector3(geometry.chimney_dim.x / 2, geometry.chimney_dim.x / 2 + 1, 0),
+            vector3(geometry.chimney_dim.x / 2, -geometry.chimney_dim.x / 2 - 1, 0),
+            vector3(0, geometry.chimney_dim.x / 2, 0),
+            vector3(geometry.chimney_dim.x / 2 + 1, geometry.chimney_dim.x / 2, 0),
+            vector3(-geometry.chimney_dim.x / 2 - 1, geometry.chimney_dim.x / 2, 0),
+            vector3(geometry.reactor_dim.x, 0, 0),
+            vector3(0, geometry.reactor_dim.x, 0),
+            vector3(-geometry.reactor_dim.x, 0, 0),
+            vector3(0, -geometry.reactor_dim.x, 0),
+        ]
+
+        self._mesh_near_points(points, geometry, mesh, True)
+
+        # different way to mesh this segment
         on_line_pos = (
             geometry.square_width / 2 + (1 / 2 ** (1 / 2)) * geometry.reactor_dim.x
         ) / 2
@@ -307,6 +427,38 @@ class ReactorMaker:
             algo.NumberOfSegments(nb_seg)
         algo.Propagation()
 
+    def _create_extrusion_mesh(self, geometry, mesh) -> None:
+        points = [
+            vector3(
+                geometry.reactor_dim.x,
+                geometry.reactor_dim.x,
+                geometry.reactor_dim.y / 2,
+            ),
+            vector3(
+                geometry.chimney_dim.x,
+                geometry.chimney_dim.x,
+                geometry.reactor_dim.y + geometry.chimney_dim.y / 2,
+            ),
+        ]
+
+        self._mesh_near_points(points, geometry, mesh, False)
+
+    def mesh(self, geometry: ReactorGeometry, optimize: bool) -> Result:
+        if geometry.geometry is None:
+            return Result(error="Geometry has not yet been created")
+
+        all_edges = self._geompy.SubShapeAllSortedCentres(
+            geometry.geometry, self._geompy.ShapeType["EDGE"]
+        )
+
+        mesh = self._smesh.Mesh(geometry.geometry)
+
+        mesh.Segment().NumberOfSegments(1)
+
+        self._create_base_mesh(geometry, mesh, optimize, all_edges)
+
+        self._create_extrusion_mesh(geometry, mesh)
+
         mesh.Quadrangle()
         mesh.Hexahedron()
 
@@ -317,6 +469,20 @@ class ReactorMaker:
         if not mesh.Compute():
             return Result(error="Error when computing mesh")
 
+        all_elements = mesh.GetElementsId()
+
+        aspect_ratios = []
+        for elem_id in all_elements:
+            ar = mesh.GetAspectRatio(elem_id)
+            if ar > 0: 
+                aspect_ratios.append(ar)
+
+        print(f"Total elements: {len(aspect_ratios)}")
+        print(f"Min AR: {min(aspect_ratios):.3f}")
+        print(f"Max AR: {max(aspect_ratios):.3f}")
+        print(f"Mean AR: {sum(aspect_ratios)/len(aspect_ratios):.3f}")
+        print()
+
         return Result(
             value=ReactorMesh(
                 mesh=mesh,
@@ -326,10 +492,21 @@ class ReactorMaker:
                 geompy=self._geompy,
             )
         )
+    
+    def _get_aspect_ratio(self, mesh) -> List:
+        all_elements = mesh.GetElementsId()
 
-    def _get_max_length(self, R, square_width, mesh_size):
+        aspect_ratios = []
+        for elem_id in all_elements:
+            ar = mesh.GetAspectRatio(elem_id)
+            if ar > 0: 
+                aspect_ratios.append(ar)
+
+        return aspect_ratios
+
+    def _get_max_length(self, R, square_width, mesh_size) -> Tuple[float, float]:
         N_theta = ceil(square_width / mesh_size)
-        #r0 = sqrt(2) * (square_width / 2)
+        # r0 = sqrt(2) * (square_width / 2)
         r0 = (mesh_size * 4 * N_theta) / (2 * pi)
         q = 1 + (2 * pi) / (4 * N_theta)
 
@@ -339,11 +516,13 @@ class ReactorMaker:
         N = log(R / r0) / log(1 + (2 * pi) / (4 * N_theta))
 
         dr_min = r_i(1) - r_i(0)
-        dr_max = r_i(N) - r_i(N - 1) 
+        dr_max = r_i(N) - r_i(N - 1)
 
         return dr_min, q
 
-    def _find_egde_by_geometry(self, all_edges, center_pt: vector3, tol=1e-1) -> Result:
+    def _find_egde_by_geometry(
+        self, all_edges, center_pt: vector3, tol: float = 1e-1
+    ) -> Result:
         for edge in all_edges:
             vertices = self._geompy.ExtractShapes(
                 edge, self._geompy.ShapeType["VERTEX"]

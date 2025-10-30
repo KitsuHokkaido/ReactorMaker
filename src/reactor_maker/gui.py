@@ -7,6 +7,8 @@ from ttkbootstrap.constants import *
 
 from typing import List
 
+from reactor_maker.engine import geometry
+
 from .engine import ReactorMaker
 from .vector import vector2, vector3
 
@@ -27,6 +29,7 @@ class Application:
         self._rframe.pack(side=RIGHT, fill=BOTH, expand=True, padx=10, pady=10)
 
         self._per_square_var = tk.StringVar(value="0.50")
+        self._per_curvature_var = tk.StringVar(value="0.10")
 
         self._generate_parameters_widget()
 
@@ -78,11 +81,7 @@ class Application:
         self._menu.add_cascade(label="About", menu=self._about_menu)
         self._about_menu.add_command(label="About", command=self._on_about)
 
-    def _generate_parameters_widget(self):
-        # ---------------------- Geometry Frame -----------------------
-        geometry_frame = ttk.LabelFrame(self._lframe, text="Geometry")
-        geometry_frame.pack(side=TOP, fill=X)
-
+    def _generate_reactor_widget(self, geometry_frame):
         ttk.Label(
             geometry_frame, text="Reactor dimensions", font=("Helvetica", 10, "bold")
         ).grid(row=0, column=0, columnspan=2, sticky=W, padx=5, pady=5)
@@ -117,32 +116,7 @@ class Application:
         self._reactor_height_entry = ttk.Entry(geometry_frame)
         self._reactor_height_entry.grid(row=3, column=1, padx=5, pady=5)
 
-        ttk.Label(geometry_frame, text="Square mesh size").grid(
-            row=4, column=0, padx=5, pady=5, sticky=W
-        )
-
-        frame_scale = ttk.Frame(geometry_frame)
-        frame_scale.grid(row=4, column=1, pady=5, sticky=EW)
-
-        self._per_squarre_entry = ttk.Scale(
-            frame_scale,
-            orient=HORIZONTAL,
-            value=50,
-            from_=0,
-            to=99,
-            length=80,
-            command=self._update_per_square,
-        )
-        self._per_squarre_entry.pack(side=LEFT, fill=X, expand=True, padx=(28, 10))
-
-        ttk.Label(frame_scale, textvariable=self._per_square_var, width=6).pack(
-            side=RIGHT
-        )
-
-        ttk.Separator(geometry_frame, orient=HORIZONTAL).grid(
-            row=5, column=0, columnspan=2, sticky=EW, pady=15, padx=10
-        )
-
+    def _generate_chimney_widget(self, geometry_frame):
         ttk.Label(
             geometry_frame, text="Chimney dimensions", font=("Helvetica", 10, "bold")
         ).grid(row=6, column=0, columnspan=2, sticky=W, padx=5, pady=5)
@@ -162,20 +136,83 @@ class Application:
 
         geometry_frame.columnconfigure(1, weight=1)
 
-        # ---------------------- Meshing Frame --------------------------
-        meshing_frame = ttk.LabelFrame(self._lframe, text="Meshing")
-        meshing_frame.pack(fill=X, pady=15)
-
+    def _generate_meshing_widgets(self, meshing_frame):
         ttk.Label(meshing_frame, text="Characteritics mesh size").grid(
             row=0, column=0, padx=5, pady=5
         )
         self._mesh_size_entry = ttk.Entry(meshing_frame)
         self._mesh_size_entry.grid(row=0, column=1, padx=10, pady=10)
 
+        ttk.Label(meshing_frame, text="Square mesh size").grid(
+            row=4, column=0, padx=5, pady=5, sticky=W
+        )
+
+        frame_scale = ttk.Frame(meshing_frame)
+        frame_scale.grid(row=4, column=1, pady=5, sticky=EW)
+
+        self._per_squarre_entry = ttk.Scale(
+            frame_scale,
+            orient=HORIZONTAL,
+            value=50,
+            from_=0,
+            to=99,
+            length=80,
+            command=self._update_per_square,
+        )
+        self._per_squarre_entry.pack(side=LEFT, fill=X, expand=True, padx=(28, 10))
+
+        ttk.Label(frame_scale, textvariable=self._per_square_var, width=6).pack(
+            side=RIGHT
+        )
+
+        ttk.Label(meshing_frame, text="Square mesh curvature").grid(
+            row=5, column=0, padx=5, pady=5, sticky=W
+        )
+
+        frame_scale = ttk.Frame(meshing_frame)
+        frame_scale.grid(row=5, column=1, pady=5, sticky=EW)
+
+        self._per_curvature_entry = ttk.Scale(
+            frame_scale,
+            orient=HORIZONTAL,
+            value=10,
+            from_=0,
+            to=99,
+            length=80,
+            command=self._update_per_curvature,
+        )
+        self._per_curvature_entry.pack(side=LEFT, fill=X, expand=True, padx=(28, 10))
+
+        ttk.Label(frame_scale, textvariable=self._per_curvature_var, width=6).pack(
+            side=RIGHT
+        )
+
         meshing_frame.columnconfigure(1, weight=1)
+
+    def _generate_parameters_widget(self):
+        # ---------------------- Geometry Frame -----------------------
+        geometry_frame = ttk.LabelFrame(self._lframe, text="Geometry")
+        geometry_frame.pack(side=TOP, fill=X)
+        
+        self._generate_reactor_widget(geometry_frame)
+
+        ttk.Separator(geometry_frame, orient=HORIZONTAL).grid(
+            row=5, column=0, columnspan=2, sticky=EW, pady=15, padx=10
+        )
+
+        self._generate_chimney_widget(geometry_frame)
+
+        # ---------------------- Meshing Frame --------------------------
+        meshing_frame = ttk.LabelFrame(self._lframe, text="Meshing")
+        meshing_frame.pack(fill=X, pady=15)
+
+        self._generate_meshing_widgets(meshing_frame)
 
     def _update_per_square(self, value):
         self._per_square_var.set(f"{float(value)/100:.2f}")
+
+    def _update_per_curvature(self, value):
+        self._per_curvature_var.set(f"{float(value)/100:.2f}")
 
     def _generate_output_widget(self):
         self._tabs = ttk.Notebook(self._rframe)
@@ -224,28 +261,32 @@ class Application:
         radius = self._reactor_radius_entry.get()
         height = self._reactor_height_entry.get()
         per_squarre = self._per_squarre_entry.get() / 100
+        per_curvature = self._per_curvature_entry.get() / 100
         chimney_w = self._chimney_width_entry.get()
         chimney_h = self._chimney_height_entry.get()
         mesh_size = self._mesh_size_entry.get()
         optimize = self._optimize_var.get() != 0
 
         if not self._check_entry(
-            [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center]
+            [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center, per_curvature]
         ):
             return
 
-        self._outputs.insert(END, f"\n--- Generation started ---\n\n")
+        self._outputs.insert(END, f"\n----------- Generation started ----------\n\n")
         self._outputs.insert(END, f"Center: {center}\n")
         self._outputs.insert(END, f"Reactor radius: {radius}\n")
         self._outputs.insert(END, f"Reactor height: {height}\n")
-        self._outputs.insert(END, f"Reactor per_squarre: {per_squarre}\n")
+        self._outputs.insert(END, f"Reactor per_squarre: {per_squarre:0.2f}\n")
+        self._outputs.insert(END, f"Curvature ratio: {per_curvature}\n\n")
         self._outputs.insert(END, f"Chimney width: {chimney_w}\n")
         self._outputs.insert(END, f"Chimney height: {chimney_h}\n")
-        self._outputs.insert(END, f"Mesh size: {mesh_size}\n")
+        self._outputs.insert(END, f"Mesh size: {mesh_size}\n\n")
 
         self._outputs.see(END)
 
         maker = ReactorMaker()
+
+        maker.set_output_widget(self._outputs)
 
         geometry = maker.create_geometry(
             center=vector3(float(center[0]), float(center[1]), float(center[2])),
@@ -253,9 +294,13 @@ class Application:
             chimney_dim=vector2(float(chimney_w), float(chimney_h)),
             per_square=float(per_squarre),
             mesh_size=float(mesh_size),
+            per_curvature=per_curvature, 
+            optimize=optimize
         ).unwrap()
-        
+
         self._mesh = maker.mesh(geometry, optimize).unwrap()
+
+        maker.reset_output()
 
         self._outputs.insert(END, f"\nMesh succesfully computed !\n")
 
