@@ -7,8 +7,8 @@ from ttkbootstrap.constants import *
 
 from typing import List
 
-from .core import ReactorMaker
-from .vector.vector import vector2, vector3
+from .engine import ReactorMaker
+from .vector import vector2, vector3
 
 
 class Application:
@@ -33,8 +33,10 @@ class Application:
         button_frame = ttk.Frame(self._lframe)
         button_frame.pack(side=BOTTOM, fill=X, pady=5)
 
+        self._optimize_var = ttk.IntVar()
+
         self._optimize_button = ttk.Checkbutton(
-            self._lframe, text="Optimize mesh (beta)"
+            self._lframe, text="Optimize mesh (beta)", variable=self._optimize_var
         )
         self._optimize_button.pack(side=LEFT, padx=5)
         self._optimize_button.invoke()
@@ -200,12 +202,11 @@ class Application:
 
     def _check_entry(self, datas: List) -> bool:
         for data in datas:
-            print(type(data))
             if not data:
                 showwarning(title="Warning", message="Some values aren't filled !")
                 return False
             if not isinstance(data, float):
-                if not data.isdigit():
+                if not self._is_float(data):
                     showwarning(title="Warning", message="Numbers are expected !")
                     return False
 
@@ -226,8 +227,7 @@ class Application:
         chimney_w = self._chimney_width_entry.get()
         chimney_h = self._chimney_height_entry.get()
         mesh_size = self._mesh_size_entry.get()
-
-        print(center)
+        optimize = self._optimize_var.get() != 0
 
         if not self._check_entry(
             [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center]
@@ -254,8 +254,8 @@ class Application:
             per_square=float(per_squarre),
             mesh_size=float(mesh_size),
         ).unwrap()
-
-        self._mesh = maker.mesh(geometry).unwrap()
+        
+        self._mesh = maker.mesh(geometry, optimize).unwrap()
 
         self._outputs.insert(END, f"\nMesh succesfully computed !\n")
 
@@ -276,6 +276,15 @@ class Application:
 
     def _on_about(self):
         showinfo(title="About", message="Reactor Maker\nv1.0.0")
+
+    def _is_float(self, value: str) -> bool:
+        if value is None:
+            return False
+        try:
+            float(value)
+            return True
+        except:
+            return False
 
     def run(self):
         self._window.mainloop()

@@ -7,10 +7,11 @@ from salome.geom import geomBuilder
 from salome.smesh import smeshBuilder
 
 from pathlib import Path
-from math import pi, ceil
+from math import pi, ceil, log, sqrt
 
-from .error.result import Result
-from .vector.vector import vector3, vector2
+from ..error import Result
+from ..vector import vector3, vector2
+
 from .geometry import ReactorGeometry
 from .mesh import ReactorMesh
 from .sketcher import Sketcher
@@ -210,7 +211,6 @@ class ReactorMaker:
 
         reactor = self._geompy.MakePartition([solid, chimney])
         reactor = self._geompy.MakeGlueFaces(reactor, 1e-6)
-        # reactor = self._geompy.RemoveExtraEdges(reactor, True)
 
         faces = self._geompy.SubShapeAllSortedCentres(
             reactor, self._geompy.ShapeType["FACE"]
@@ -236,7 +236,7 @@ class ReactorMaker:
             )
         )
 
-    def mesh(self, geometry: ReactorGeometry) -> Result:
+    def mesh(self, geometry: ReactorGeometry, optimize:bool) -> Result:
         if geometry.geometry is None:
             return Result(error="Geometry has not yet been created")
 
@@ -247,10 +247,6 @@ class ReactorMaker:
         mesh = self._smesh.Mesh(geometry.geometry)
 
         mesh.Segment().NumberOfSegments(1)
-
-        on_line_pos = (
-            geometry.square_width / 2 + (1 / 2 ** (1 / 2)) * geometry.reactor_dim.x
-        ) / 2
 
         points = [
             vector3(geometry.chimney_dim.x / 2, 0, 0),
@@ -264,7 +260,6 @@ class ReactorMaker:
                 geometry.reactor_dim.x,
                 geometry.reactor_dim.y / 2,
             ),
-            vector3(on_line_pos, on_line_pos, 0),
             vector3(
                 geometry.chimney_dim.x,
                 geometry.chimney_dim.x,
@@ -279,11 +274,7 @@ class ReactorMaker:
         nb_seg_tot = 0
         for i, point in enumerate(points):
             vertice = self._geompy.MakeVertex(point.x, point.y, point.z)
-
-            if i == 7:
-                edge = self._find_egde_by_geometry(all_edges, point).unwrap()
-            else:
-                edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertice)
+            edge = self._geompy.GetEdgeNearPoint(geometry.geometry, vertice)
 
             length = self._geompy.BasicProperties(edge)[0]
             nb_seg = ceil(length / geometry.mesh_size)
@@ -291,12 +282,30 @@ class ReactorMaker:
             if i >= 0 and i <= 2:
                 nb_seg_tot += nb_seg
 
-            if i >= 9:
+            if i >= 8:
                 nb_seg = nb_seg_tot
 
             algo = mesh.Segment(edge)
             algo.NumberOfSegments(nb_seg)
             algo.Propagation()
+
+        on_line_pos = (
+            geometry.square_width / 2 + (1 / 2 ** (1 / 2)) * geometry.reactor_dim.x
+        ) / 2
+        point = vector3(on_line_pos, on_line_pos, 0)
+        edge = self._find_egde_by_geometry(all_edges, point).unwrap()
+
+        algo = mesh.Segment(edge)
+        if optimize:
+            edge_length_min, ratio = self._get_max_length(
+                geometry.reactor_dim.x, geometry.square_width, geometry.mesh_size
+            )
+            algo.GeometricProgression(edge_length_min, ratio)
+        else:
+            length = self._geompy.BasicProperties(edge)[0]
+            nb_seg = ceil(length / geometry.mesh_size)
+            algo.NumberOfSegments(nb_seg)
+        algo.Propagation()
 
         mesh.Quadrangle()
         mesh.Hexahedron()
@@ -317,6 +326,22 @@ class ReactorMaker:
                 geompy=self._geompy,
             )
         )
+
+    def _get_max_length(self, R, square_width, mesh_size):
+        N_theta = ceil(square_width / mesh_size)
+        #r0 = sqrt(2) * (square_width / 2)
+        r0 = (mesh_size * 4 * N_theta) / (2 * pi)
+        q = 1 + (2 * pi) / (4 * N_theta)
+
+        def r_i(i):
+            return r0 * (1 + (2 * pi) / (4 * N_theta)) ** i
+
+        N = log(R / r0) / log(1 + (2 * pi) / (4 * N_theta))
+
+        dr_min = r_i(1) - r_i(0)
+        dr_max = r_i(N) - r_i(N - 1) 
+
+        return dr_min, q
 
     def _find_egde_by_geometry(self, all_edges, center_pt: vector3, tol=1e-1) -> Result:
         for edge in all_edges:

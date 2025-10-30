@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from .core import ReactorMaker
-from .vector.vector import vector3, vector2
+from .engine import ReactorMaker
+from .vector import vector3, vector2
 
 
 def pars_arg():
@@ -44,7 +44,7 @@ def pars_arg():
     parser.add_argument(
         "-p",
         "--per_square",
-        type=float,
+        type=personnalized_per_square_constraint,
         default=0.5,
         help="Size of the square in the center of the reactor. Fraction of the radius. Default: 0.5",
     )
@@ -65,9 +65,28 @@ def pars_arg():
         help="Output directory. Default: current directory",
     )
 
+    parser.add_argument(
+        "-++",
+        "--optimize",
+        type=int, 
+        default=0,
+        help="Try to optimize the meshing. 0 : no optimization. 1 : optimization"
+    )
+
     parser.add_argument("-v", "--version", action="version", version="%(prog)s 0.1.0")
 
     return parser.parse_args()
+
+def personnalized_per_square_constraint(value: any) -> float:
+    try:
+        float(value)
+    except:
+        raise argparse.ArgumentTypeError(f"{value} must be a float")
+    fvalue = float(value)
+    if fvalue <= 0 or fvalue >= 1:
+        raise argparse.ArgumentTypeError(f"{value} must be between 0 and 1")
+
+    return fvalue
 
 
 def main() -> None:
@@ -99,13 +118,11 @@ def main() -> None:
 
     if geometry.export_to(f"{args.output}/geometry.stl"):
         print("File succesfully saved !")
-
-    mesh = maker.mesh(geometry).unwrap()
+    optimize = args.optimize != 0
+    mesh = maker.mesh(geometry, optimize).unwrap()
 
     if mesh.export_to(f"{args.output}/mesh.unv"):
         print("File succesfully saved !")
-
-    # mesh.save_as(f"{args.output}/mesh.hdf")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from math import pi, cos, sin
 
-from .vector.vector import vector2, vector3
+from ..vector import vector2
 
 
 class Sketcher:
