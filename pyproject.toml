@@ -12,7 +12,9 @@ authors = [
     {name = "ALLOUCHE", email = "david_allouche@outlook.com"}
 ]
 dependencies = [
-    "ttkbootstrap>=1.1", 
+    "ttkbootstrap>=1.1",
+    "scipy>=1.6.1", 
+    "pyyaml>=6.0.3"
 ]
 
 [project.optional-dependencies]

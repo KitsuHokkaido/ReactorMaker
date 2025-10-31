@@ -1,13 +1,12 @@
 import tkinter as tk
-from tkinter.filedialog import asksaveasfilename
+from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter.messagebox import showinfo, showwarning
 
+import yaml
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
-from typing import List
-
-from reactor_maker.engine import geometry
+from typing import Dict, Optional, List
 
 from .engine import ReactorMaker
 from .vector import vector2, vector3
@@ -67,19 +66,88 @@ class Application:
         self._window.config(menu=self._menu)
 
         self._file_menu = ttk.Menu(self._menu)
-        self._menu.add_cascade(label="File", menu=self._file_menu)
         self._file_menu.add_command(label="New", command=self._on_reset)
-        self._file_menu.add_command(label="Save As", command=self._on_save_as)
+        self._file_menu.add_command(label="Open", command=self._on_open)
+            
+        self._file_menu.add_separator()
+        
+        self._save_menu = ttk.Menu(self._menu)
+        self._save_menu.add_command(label="YAML", command=self._on_yaml)
+        self._save_menu.add_command(label="TOML", command=self._on_toml)
+        self._file_menu.add_cascade(label="Save As", menu=self._save_menu)
+
         self._file_menu.add_separator()
         self._file_menu.add_command(label="Exit", command=self._window.quit)
+        self._menu.add_cascade(label="File", menu=self._file_menu)
 
         self._mesh_menu = ttk.Menu(self._menu)
-        self._menu.add_cascade(label="Mesh", menu=self._mesh_menu)
         self._mesh_menu.add_command(label="Generate", command=self._on_generate)
+        self._export_mesh_menu = ttk.Menu(self._menu)
+        self._export_mesh_menu.add_command(label="UNV", command=self._on_export_unv)
+        self._mesh_menu.add_cascade(label="Export", menu=self._export_mesh_menu)
+        self._menu.add_cascade(label="Mesh", menu=self._mesh_menu)
 
-        self._about_menu = ttk.Menu(self._menu)
-        self._menu.add_cascade(label="About", menu=self._about_menu)
-        self._about_menu.add_command(label="About", command=self._on_about)
+        self._geometry_menu = ttk.Menu(self._menu)
+        self._geometry_menu.add_command(label="Export")
+        self._menu.add_cascade(label="Geometry", menu=self._geometry_menu)
+
+        self._help_menu = ttk.Menu(self._menu)
+        self._help_menu.add_command(label="Documentation")
+        self._help_menu.add_command(label="About", command=self._on_about)
+        self._menu.add_cascade(label="Help", menu=self._help_menu)
+
+    def _on_open(self):
+        filename = askopenfilename(title="Select File", filetypes=(("yaml files", "*.yaml"), ("toml file", "*.toml")))
+        
+        datas = None
+        with open(filename, "r") as f:
+            datas = yaml.safe_load(f)
+
+        reactor = datas["reactor"]
+        chimney = datas["chimney"]
+        meshing = datas["meshing"]
+
+        self._on_reset()
+         
+        for i, entry in enumerate(self._center_entry):
+            entry.insert(0, reactor["center"][i])
+
+        self._reactor_radius_entry.insert(0, reactor["radius"])
+
+        self._reactor_height_entry.insert(0, reactor["height"])
+
+        self._chimney_width_entry.insert(0, chimney["width"])
+
+        self._chimney_height_entry.insert(0, chimney["height"])
+
+        self._mesh_size_entry.insert(0, meshing["size"])
+
+        if meshing["optimize"] == 1:
+            self._optimize_button.invoke()
+
+        self._per_squarre_entry.set(meshing["square_ratio"]*100)
+
+        self._per_curvature_entry.set(meshing["curvature_ratio"]*100)
+
+
+    def _on_yaml(self):
+        datas = self._get_datas()
+        if datas is None:
+            return
+ 
+        filename = asksaveasfilename(
+            title="Save As",
+            defaultextension=".yaml",
+        )
+
+        with open(filename, "w") as f:
+            yaml.dump(datas, f)
+
+
+        showinfo(title="Info", message="File saved to yaml format !")
+
+    def _on_toml(self):
+        return
 
     def _generate_reactor_widget(self, geometry_frame):
         ttk.Label(
@@ -233,30 +301,12 @@ class Application:
         self._reactor_radius_entry.delete(0, END)
         self._reactor_height_entry.delete(0, END)
         self._per_squarre_entry.set(50)
+        self._per_curvature_entry.set(50)
         self._chimney_width_entry.delete(0, END)
         self._chimney_height_entry.delete(0, END)
         self._mesh_size_entry.delete(0, END)
 
-    def _check_entry(self, datas: List) -> bool:
-        for data in datas:
-            if not data:
-                showwarning(title="Warning", message="Some values aren't filled !")
-                return False
-            if not isinstance(data, float):
-                if not self._is_float(data):
-                    showwarning(title="Warning", message="Numbers are expected !")
-                    return False
-
-        if float(datas[2]) * float(datas[0]) < float(datas[3]):
-            showwarning(
-                title="Warning",
-                message="Squarre meshing size must be greater than the width of the chimney !",
-            )
-            return False
-
-        return True
-
-    def _on_generate(self):
+    def _get_datas(self) -> Optional[Dict]:
         center = [entry.get() for entry in self._center_entry]
         radius = self._reactor_radius_entry.get()
         height = self._reactor_height_entry.get()
@@ -267,20 +317,69 @@ class Application:
         mesh_size = self._mesh_size_entry.get()
         optimize = self._optimize_var.get() != 0
 
-        if not self._check_entry(
-            [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center, per_curvature]
-        ):
+        datas = [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center, per_curvature]
+
+        for data in datas:
+            if not data:
+                showwarning(title="Warning", message="Some values aren't filled !")
+                return None
+            if not isinstance(data, float):
+                if not self._is_float(data):
+                    showwarning(title="Warning", message="Numbers are expected !")
+                    return None
+        if optimize:
+            if float(datas[0]) < float(datas[3]):
+                showwarning(
+                    title="Warning",
+                    message="Squarre meshing size must be greater than the width of the chimney !",
+                )
+                return None
+        else:
+            if float(datas[2]) * float(datas[0]) < float(datas[3]):
+                showwarning(
+                    title="Warning",
+                    message="Squarre meshing size must be greater than the width of the chimney !",
+                )
+                return None
+
+        data = {
+            "reactor": {
+                "center": center,
+                "radius" : radius, 
+                "height": height
+            }, 
+            "chimney": {
+                "width": chimney_w, 
+                "height": chimney_h
+            }, 
+            "meshing": {
+                "size": mesh_size,
+                "square_ratio": per_squarre,
+                "curvature_ratio": per_curvature,
+                "optimize":self._optimize_var.get()
+            }
+        }
+
+        return data
+
+    def _on_generate(self):
+        datas = self._get_datas() 
+        if datas is None:
             return
 
+        reactor = datas["reactor"]
+        chimney = datas["chimney"]
+        meshing = datas["meshing"]
+
         self._outputs.insert(END, f"\n----------- Generation started ----------\n\n")
-        self._outputs.insert(END, f"Center: {center}\n")
-        self._outputs.insert(END, f"Reactor radius: {radius}\n")
-        self._outputs.insert(END, f"Reactor height: {height}\n")
-        self._outputs.insert(END, f"Reactor per_squarre: {per_squarre:0.2f}\n")
-        self._outputs.insert(END, f"Curvature ratio: {per_curvature}\n\n")
-        self._outputs.insert(END, f"Chimney width: {chimney_w}\n")
-        self._outputs.insert(END, f"Chimney height: {chimney_h}\n")
-        self._outputs.insert(END, f"Mesh size: {mesh_size}\n\n")
+        self._outputs.insert(END, f"Center: {reactor["center"]}\n")
+        self._outputs.insert(END, f"Reactor radius: {reactor["radius"]}\n")
+        self._outputs.insert(END, f"Reactor height: {reactor["height"]}\n")
+        self._outputs.insert(END, f"Reactor per_squarre: {meshing["square_ratio"]:0.2f}\n")
+        self._outputs.insert(END, f"Curvature ratio: {meshing["curvature_ratio"]:0.2f}\n\n")
+        self._outputs.insert(END, f"Chimney width: {chimney["width"]}\n")
+        self._outputs.insert(END, f"Chimney height: {chimney["height"]}\n")
+        self._outputs.insert(END, f"Mesh size: {meshing["size"]}\n\n")
 
         self._outputs.see(END)
 
@@ -288,13 +387,15 @@ class Application:
 
         maker.set_output_widget(self._outputs)
 
+        optimize = meshing["optimize"] != 0
+
         geometry = maker.create_geometry(
-            center=vector3(float(center[0]), float(center[1]), float(center[2])),
-            reactor_dim=vector2(float(radius), float(height)),
-            chimney_dim=vector2(float(chimney_w), float(chimney_h)),
-            per_square=float(per_squarre),
-            mesh_size=float(mesh_size),
-            per_curvature=per_curvature, 
+            center=vector3(float(reactor["center"][0]), float(reactor["center"][1]), float(reactor["center"][2])),
+            reactor_dim=vector2(float(reactor["radius"]), float(reactor["height"])),
+            chimney_dim=vector2(float(chimney["width"]), float(chimney["height"])),
+            per_square=float(meshing["square_ratio"]),
+            mesh_size=float(meshing["size"]),
+            per_curvature=meshing["curvature_ratio"], 
             optimize=optimize
         ).unwrap()
 
@@ -305,19 +406,20 @@ class Application:
         self._outputs.insert(END, f"\nMesh succesfully computed !\n")
 
         showinfo(title="Info", message="Mesh computed !")
-
-    def _on_save_as(self):
+    
+    def _on_export_unv(self):
         if self._mesh is None:
+            showinfo(title="Info", message="No mesh generated")
             return
 
         filename = asksaveasfilename(
-            title="Save As",
+            title="Export As",
             defaultextension=".unv",
         )
 
         if self._mesh.export_to(filename):
             self._outputs.insert(END, f"\nMesh succesfully saved !\n")
-            showinfo(title="Info", message="File saved !")
+            showinfo(title="Info", message="File exported to unv format !")
 
     def _on_about(self):
         showinfo(title="About", message="Reactor Maker\nv1.0.0")

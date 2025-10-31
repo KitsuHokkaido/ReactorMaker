@@ -178,48 +178,56 @@ class ReactorMaker:
 
     def _optimize_geom_mesh(
         self, center, reactor_dim, chimney_dim, mesh_size
-    ) -> Optional[Tuple]:
+    ) -> Tuple[float, float]:
         sketcher = Sketcher(self._geompy)
 
+        best_param = None
+        res_min = float("inf") 
+
         def residus(x):
+            nonlocal best_param, res_min
             per_square, per_curvature = x
 
             square_width = per_square * reactor_dim.x
-            
-            base = self._create_base(
-                sketcher, center, reactor_dim, chimney_dim, square_width, per_curvature
-            )
-            
-            geometry = ReactorGeometry(
-                base,
-                None,
-                reactor_dim,
-                chimney_dim,
-                per_square,
-                mesh_size,
-                square_width,
-            )
 
-            mesh = self._smesh.Mesh(base)
+            try: 
+                base = self._create_base(
+                    sketcher, center, reactor_dim, chimney_dim, square_width, per_curvature
+                )
+                
+                geometry = ReactorGeometry(
+                    base,
+                    None,
+                    reactor_dim,
+                    chimney_dim,
+                    per_square,
+                    mesh_size,
+                    square_width,
+                )
 
-            mesh.Segment().NumberOfSegments(1)
+                mesh = self._smesh.Mesh(base)
 
-            all_edges = self._geompy.SubShapeAllSortedCentres(
-                geometry.geometry, self._geompy.ShapeType["EDGE"]
-            )
+                mesh.Segment().NumberOfSegments(1)
 
-            self._create_base_mesh(geometry, mesh, True, all_edges)
+                all_edges = self._geompy.SubShapeAllSortedCentres(
+                    geometry.geometry, self._geompy.ShapeType["EDGE"]
+                )
 
-            mesh.Quadrangle()
+                self._create_base_mesh(geometry, mesh, True, all_edges)
 
-            try:
+                mesh.Quadrangle()
+
                 mesh.Compute()
 
                 aspect_ratios = self._get_aspect_ratio(mesh)
+                res = max(aspect_ratios) - 1
+                
+                if res < res_min:
+                    best_param = x
+                    res_min = res
+                    print(res)
 
-                print(max(aspect_ratios))
-
-                return max(aspect_ratios) - 1
+                return res
 
             except Exception as e:
                 print(e)
@@ -243,10 +251,19 @@ class ReactorMaker:
             print("Failed to optimize the geometry...")
             print("==================================")
             print("")
-            print("Trying to compute without optimization...")
+            print("Using the best parameters found to compute the meshing")
             print("")
 
-            return None
+            if best_param is None:
+                raise RuntimeError("Error during the optimization")
+
+            return best_param
+
+        print("")
+        print("==================================")
+        print("Optimization succeded...")
+        print("==================================")
+        print("")
 
         return result.x
 
@@ -267,22 +284,16 @@ class ReactorMaker:
             print()
             print("Optimize option selected...")
             print("Optimizing...")
-            if reactor_dim.x <= 0.8 * chimney_dim.x:
+            if chimney_dim.x > reactor_dim.x:
                 return Result(
                     error="Chimney width can't be greater than the max size of the meshing square"
                 )
 
             result = self._optimize_geom_mesh(center, reactor_dim, chimney_dim, msh_sz)
-            if result is None:
-                print("Computing the reactor with the default value...")
-                print("Default value : (per_square, per_curvature) = (0.99, 0.1)")
-                print("")
-                per_curve = 0.1
-                square_width = 0.99 * reactor_dim.x
-            else:
-                print("Best parameters : ", result)
-                square_width = result[0] * reactor_dim.x
-                per_curve = result[1]
+
+            print("Best parameters : ", result)
+            square_width = result[0] * reactor_dim.x
+            per_curve = result[1]
 
         else:
             if per_square <= 0 or per_square >= 1:
@@ -292,7 +303,7 @@ class ReactorMaker:
                 return Result(error="per_curvature must be between 0 and 1")
 
             square_width = reactor_dim.x * per_square
-            if square_width < 0.8 * chimney_dim.x:
+            if chimney_dim.x > square_width:
                 return Result(
                     error="The x-dimension of the chimney can't be greater than the center-square"
                 )
