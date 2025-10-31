@@ -1,0 +1,14 @@
+[reactor]
+center = [0.0, 0.0, 0.0]
+radius = 20
+height =  100
+
+[chimney]
+width = 6 
+height = 15 
+
+[meshing]
+size = 2 
+square_ratio = 0.9
+curvature_ratio = 0.3
+optimize = 0

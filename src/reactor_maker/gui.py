@@ -1,9 +1,8 @@
-from sys import exception
 import tkinter as tk
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter.messagebox import showinfo, showwarning
 
-import yaml
+import yaml, tomllib
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 
@@ -109,8 +108,16 @@ class Application:
         filename = askopenfilename(title="Select File", filetypes=(("yaml files", "*.yaml"), ("toml file", "*.toml")))
         
         datas = None
-        with open(filename, "r") as f:
-            datas = yaml.safe_load(f)
+        if filename.endswith(".yaml"):
+            with open(filename, "r") as f:
+                datas = yaml.safe_load(f)
+        elif filename.endswith(".toml"):
+            with open(filename, "rb") as f:
+                datas = tomllib.load(f)
+        else:
+            showinfo(title="Info", message="Extension file no supported")
+            return
+
 
         reactor = datas["reactor"]
         chimney = datas["chimney"]
@@ -156,6 +163,20 @@ class Application:
         showinfo(title="Info", message="File saved to yaml format !")
 
     def _on_toml(self):
+        datas = self._get_datas()
+        if datas is None:
+            return
+ 
+        filename = asksaveasfilename(
+            title="Save As",
+            defaultextension=".yaml",
+        )
+
+        with open(filename, "w") as f:
+            yaml.dump(datas, f)
+
+
+        showinfo(title="Info", message="File saved to yaml format !")
         return
 
     def _generate_reactor_widget(self, geometry_frame):

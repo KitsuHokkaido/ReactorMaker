@@ -90,7 +90,7 @@ def personnalized_per_square_constraint(value: Union[str, float, int]) -> float:
 
     fvalue = float(value)
 
-    if fvalue <= 0 or fvalue >= 1:
+    if not (0 < fvalue < 1):
         raise argparse.ArgumentTypeError(f"{value} must be between 0 and 1")
 
     return fvalue
