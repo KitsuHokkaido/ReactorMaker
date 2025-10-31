@@ -1,3 +1,4 @@
+from sys import exception
 import tkinter as tk
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tkinter.messagebox import showinfo, showwarning
@@ -5,6 +6,11 @@ from tkinter.messagebox import showinfo, showwarning
 import yaml
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+
+try:
+    import webbrowser
+except Exception as e:
+    print(e)
 
 from typing import Dict, Optional, List
 
@@ -92,9 +98,12 @@ class Application:
         self._menu.add_cascade(label="Geometry", menu=self._geometry_menu)
 
         self._help_menu = ttk.Menu(self._menu)
-        self._help_menu.add_command(label="Documentation")
+        self._help_menu.add_command(label="Documentation", command=self._on_documentation)
         self._help_menu.add_command(label="About", command=self._on_about)
         self._menu.add_cascade(label="Help", menu=self._help_menu)
+
+    def _on_documentation(self):
+        webbrowser.open_new("https://github.com/KitsuHokkaido/ReactorMaker/blob/master/docs/index.md")
 
     def _on_open(self):
         filename = askopenfilename(title="Select File", filetypes=(("yaml files", "*.yaml"), ("toml file", "*.toml")))
