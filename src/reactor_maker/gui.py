@@ -73,9 +73,9 @@ class Application:
         self._file_menu = ttk.Menu(self._menu)
         self._file_menu.add_command(label="New", command=self._on_reset)
         self._file_menu.add_command(label="Open", command=self._on_open)
-            
+
         self._file_menu.add_separator()
-        
+
         self._save_menu = ttk.Menu(self._menu)
         self._save_menu.add_command(label="YAML", command=self._on_yaml)
         self._save_menu.add_command(label="TOML", command=self._on_toml)
@@ -97,16 +97,23 @@ class Application:
         self._menu.add_cascade(label="Geometry", menu=self._geometry_menu)
 
         self._help_menu = ttk.Menu(self._menu)
-        self._help_menu.add_command(label="Documentation", command=self._on_documentation)
+        self._help_menu.add_command(
+            label="Documentation", command=self._on_documentation
+        )
         self._help_menu.add_command(label="About", command=self._on_about)
         self._menu.add_cascade(label="Help", menu=self._help_menu)
 
     def _on_documentation(self):
-        webbrowser.open_new("https://github.com/KitsuHokkaido/ReactorMaker/blob/master/docs/index.md")
+        webbrowser.open_new(
+            "https://github.com/KitsuHokkaido/ReactorMaker/blob/master/docs/index.md"
+        )
 
     def _on_open(self):
-        filename = askopenfilename(title="Select File", filetypes=(("yaml files", "*.yaml"), ("toml file", "*.toml")))
-        
+        filename = askopenfilename(
+            title="Select File",
+            filetypes=(("yaml files", "*.yaml"), ("toml file", "*.toml")),
+        )
+
         datas = None
         if filename.endswith(".yaml"):
             with open(filename, "r") as f:
@@ -118,13 +125,12 @@ class Application:
             showinfo(title="Info", message="Extension file no supported")
             return
 
-
         reactor = datas["reactor"]
         chimney = datas["chimney"]
         meshing = datas["meshing"]
 
         self._on_reset()
-         
+
         for i, entry in enumerate(self._center_entry):
             entry.insert(0, reactor["center"][i])
 
@@ -141,16 +147,15 @@ class Application:
         if meshing["optimize"] == 1:
             self._optimize_button.invoke()
 
-        self._per_squarre_entry.set(meshing["square_ratio"]*100)
+        self._per_squarre_entry.set(meshing["square_ratio"] * 100)
 
-        self._per_curvature_entry.set(meshing["curvature_ratio"]*100)
-
+        self._per_curvature_entry.set(meshing["curvature_ratio"] * 100)
 
     def _on_yaml(self):
         datas = self._get_datas()
         if datas is None:
             return
- 
+
         filename = asksaveasfilename(
             title="Save As",
             defaultextension=".yaml",
@@ -158,7 +163,6 @@ class Application:
 
         with open(filename, "w") as f:
             yaml.dump(datas, f)
-
 
         showinfo(title="Info", message="File saved to yaml format !")
 
@@ -166,7 +170,7 @@ class Application:
         datas = self._get_datas()
         if datas is None:
             return
- 
+
         filename = asksaveasfilename(
             title="Save As",
             defaultextension=".yaml",
@@ -174,7 +178,6 @@ class Application:
 
         with open(filename, "w") as f:
             yaml.dump(datas, f)
-
 
         showinfo(title="Info", message="File saved to yaml format !")
         return
@@ -291,7 +294,7 @@ class Application:
         # ---------------------- Geometry Frame -----------------------
         geometry_frame = ttk.LabelFrame(self._lframe, text="Geometry")
         geometry_frame.pack(side=TOP, fill=X)
-        
+
         self._generate_reactor_widget(geometry_frame)
 
         ttk.Separator(geometry_frame, orient=HORIZONTAL).grid(
@@ -347,7 +350,16 @@ class Application:
         mesh_size = self._mesh_size_entry.get()
         optimize = self._optimize_var.get() != 0
 
-        datas = [radius, height, per_squarre, chimney_w, chimney_h, mesh_size, *center, per_curvature]
+        datas = [
+            radius,
+            height,
+            per_squarre,
+            chimney_w,
+            chimney_h,
+            mesh_size,
+            *center,
+            per_curvature,
+        ]
 
         for data in datas:
             if not data:
@@ -373,27 +385,20 @@ class Application:
                 return None
 
         data = {
-            "reactor": {
-                "center": center,
-                "radius" : radius, 
-                "height": height
-            }, 
-            "chimney": {
-                "width": chimney_w, 
-                "height": chimney_h
-            }, 
+            "reactor": {"center": center, "radius": radius, "height": height},
+            "chimney": {"width": chimney_w, "height": chimney_h},
             "meshing": {
                 "size": mesh_size,
                 "square_ratio": per_squarre,
                 "curvature_ratio": per_curvature,
-                "optimize":self._optimize_var.get()
-            }
+                "optimize": self._optimize_var.get(),
+            },
         }
 
         return data
 
     def _on_generate(self):
-        datas = self._get_datas() 
+        datas = self._get_datas()
         if datas is None:
             return
 
@@ -405,8 +410,12 @@ class Application:
         self._outputs.insert(END, f"Center: {reactor["center"]}\n")
         self._outputs.insert(END, f"Reactor radius: {reactor["radius"]}\n")
         self._outputs.insert(END, f"Reactor height: {reactor["height"]}\n")
-        self._outputs.insert(END, f"Reactor per_squarre: {meshing["square_ratio"]:0.2f}\n")
-        self._outputs.insert(END, f"Curvature ratio: {meshing["curvature_ratio"]:0.2f}\n\n")
+        self._outputs.insert(
+            END, f"Reactor per_squarre: {meshing["square_ratio"]:0.2f}\n"
+        )
+        self._outputs.insert(
+            END, f"Curvature ratio: {meshing["curvature_ratio"]:0.2f}\n\n"
+        )
         self._outputs.insert(END, f"Chimney width: {chimney["width"]}\n")
         self._outputs.insert(END, f"Chimney height: {chimney["height"]}\n")
         self._outputs.insert(END, f"Mesh size: {meshing["size"]}\n\n")
@@ -420,13 +429,17 @@ class Application:
         optimize = meshing["optimize"] != 0
 
         geometry = maker.create_geometry(
-            center=vector3(float(reactor["center"][0]), float(reactor["center"][1]), float(reactor["center"][2])),
+            center=vector3(
+                float(reactor["center"][0]),
+                float(reactor["center"][1]),
+                float(reactor["center"][2]),
+            ),
             reactor_dim=vector2(float(reactor["radius"]), float(reactor["height"])),
             chimney_dim=vector2(float(chimney["width"]), float(chimney["height"])),
             per_square=float(meshing["square_ratio"]),
             mesh_size=float(meshing["size"]),
-            per_curvature=meshing["curvature_ratio"], 
-            optimize=optimize
+            per_curvature=meshing["curvature_ratio"],
+            optimize=optimize,
         ).unwrap()
 
         self._mesh = maker.mesh(geometry, optimize).unwrap()
@@ -436,7 +449,7 @@ class Application:
         self._outputs.insert(END, f"\nMesh succesfully computed !\n")
 
         showinfo(title="Info", message="Mesh computed !")
-    
+
     def _on_export_unv(self):
         if self._mesh is None:
             showinfo(title="Info", message="No mesh generated")

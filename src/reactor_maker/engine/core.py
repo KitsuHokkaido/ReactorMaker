@@ -20,6 +20,7 @@ from .sketcher import Sketcher
 
 from ..text_redirector import TextRedirector
 
+
 class ReactorMaker:
     def __init__(self):
         script_dir = Path(__file__).parent
@@ -30,7 +31,7 @@ class ReactorMaker:
         self._smesh = smeshBuilder.New()
 
     def set_output_widget(self, widget):
-        self._old_output = sys.stdout 
+        self._old_output = sys.stdout
         sys.stdout = TextRedirector(widget)
 
     def reset_output(self):
@@ -182,7 +183,7 @@ class ReactorMaker:
         sketcher = Sketcher(self._geompy)
 
         best_param = None
-        res_min = float("inf") 
+        res_min = float("inf")
 
         def residus(x):
             nonlocal best_param, res_min
@@ -190,11 +191,16 @@ class ReactorMaker:
 
             square_width = per_square * reactor_dim.x
 
-            try: 
+            try:
                 base = self._create_base(
-                    sketcher, center, reactor_dim, chimney_dim, square_width, per_curvature
+                    sketcher,
+                    center,
+                    reactor_dim,
+                    chimney_dim,
+                    square_width,
+                    per_curvature,
                 )
-                
+
                 geometry = ReactorGeometry(
                     base,
                     None,
@@ -221,7 +227,7 @@ class ReactorMaker:
 
                 aspect_ratios = self._get_aspect_ratio(mesh)
                 res = max(aspect_ratios) - 1
-                
+
                 if res < res_min:
                     best_param = x
                     res_min = res
@@ -236,13 +242,13 @@ class ReactorMaker:
         bounds = [(0.05, 0.99), (0.05, 0.8)]
 
         result = minimize(
-            fun=residus, 
-            x0=[0.8, 0.2], 
-            bounds=bounds, 
+            fun=residus,
+            x0=[0.8, 0.2],
+            bounds=bounds,
             method="L-BFGS-B",
-            options={'disp':True}
+            options={'disp': True},
         )
-        
+
         if not result.success:
             print("")
             print("Error : ", result.message)
@@ -365,7 +371,7 @@ class ReactorMaker:
 
         reactor = self._geompy.MakePartition([solid, chimney])
         reactor = self._geompy.MakeGlueFaces(reactor, 1e-6)
-        
+
         print("Creation of the groups...")
         groups = self._create_group(reactor, center, reactor_dim, chimney_dim).unwrap()
         print("Done !")
@@ -485,7 +491,7 @@ class ReactorMaker:
         aspect_ratios = []
         for elem_id in all_elements:
             ar = mesh.GetAspectRatio(elem_id)
-            if ar > 0: 
+            if ar > 0:
                 aspect_ratios.append(ar)
 
         print(f"Total elements: {len(aspect_ratios)}")
@@ -503,14 +509,14 @@ class ReactorMaker:
                 geompy=self._geompy,
             )
         )
-    
+
     def _get_aspect_ratio(self, mesh) -> List:
         all_elements = mesh.GetElementsId()
 
         aspect_ratios = []
         for elem_id in all_elements:
             ar = mesh.GetAspectRatio(elem_id)
-            if ar > 0: 
+            if ar > 0:
                 aspect_ratios.append(ar)
 
         return aspect_ratios
